@@ -1,7 +1,7 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { providePrimeNG } from 'primeng/config';
-import Aura from '@primeuix/themes/aura';
+import { DspPreset } from './core/theme/dsp-preset';
 import { routes } from './app.routes';
 
 export const appConfig: ApplicationConfig = {
@@ -11,7 +11,11 @@ export const appConfig: ApplicationConfig = {
 
     providePrimeNG({
       theme: {
-        preset: Aura,
+        preset: DspPreset,
+        options: {
+          darkModeSelector: false, // light mode only for now
+          cssLayer: { name: 'primeng', order: 'theme, base, primeng, components, utilities' },
+        },
       }
     })
   ]
