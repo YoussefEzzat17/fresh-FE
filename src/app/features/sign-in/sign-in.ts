@@ -6,6 +6,7 @@ import { SignInError, SignInRequest } from '../../core/theme/auth/auth.models';
 import { BrandPanel } from './components/brand-panel/brand-panel';
 import { SignInForm } from './components/sign-in-form/sign-in-form';
 
+
 @Component({
   selector: 'app-sign-in',
   imports: [BrandPanel, SignInForm],
@@ -16,11 +17,14 @@ export class SignIn {
   private auth = inject(AuthService);
   private router = inject(Router);
 
+
   loading = signal(false);
   error = signal<SignInError>(null);
 
 
   onSubmit(req: SignInRequest) {
+    
+
     this.loading.set(true);
     this.error.set(null);
 

@@ -2,6 +2,7 @@ export type Role = 'agent' | 'guide' | 'reviewer';
 
 export interface User {
     username: string;
+    password: string;
     name: string;
     role: Role;
 }

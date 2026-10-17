@@ -14,16 +14,19 @@ export class AuthService {
         const users: Record<string, User>={
             'mona.hassan': {
                 username: 'mona.hassan',
+                password: '123456',
                 name: 'Mona Hassan',
                 role: 'agent' 
             },
             'youssef.adel': { 
                 username: 'youssef.adel', 
+                password: '123456',
                 name: 'Youssef Adel', 
                 role: 'guide' 
             },
             'nour.saleh': { 
-                username: 'nour.saleh', 
+                username: 'nour.saleh',
+                password: '123456', 
                 name: 'Nour Saleh', 
                 role: 'reviewer' 
             },
