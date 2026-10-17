@@ -1,0 +1,35 @@
+<div class="min-h-screen grid lg:grid-cols-2 bg-white">
+
+    <section class="items-center justify-center px-14 py-12 sm:px-12" aria-labelledby="signin-title">
+      <div class="w-full max-w-120 m-auto">
+  
+
+        <div class="size-14 rounded-full bg-blue-100 flex items-center justify-center ring-8 ring-blue-50">
+          <div class="size-10 rounded-full bg-brand text-white flex items-center justify-center">
+            <i class="pi pi-user"></i>
+          </div>
+        </div>
+  
+        <h1 id="signin-title" class="mt-7 text-[30px] leading-9.5 font-extrabold tracking-tight text-ink">
+          Sign in
+        </h1>
+        <p class="mt-2 text-[14.5px] leading-5.5 text-ink-3">
+          Use your bank account. You land on your role's home — Home for agents, Review queue for Guide Admins.
+        </p>
+        
+  
+        <app-sign-in-form class="mt-8"
+          [loading]="loading()"
+          [error]="error()"
+          (submitted)="onSubmit($event)" />
+  
+        <p class="mt-8 flex items-center gap-2 text-[12.5px] text-ink-3">
+          <i class="pi pi-shield"></i>
+          Every sign-in is recorded in the audit log with your role and IP.
+        </p>
+      </div>
+    </section>
+  
+
+    <app-brand-panel class="hidden lg:block" />
+  </div>
