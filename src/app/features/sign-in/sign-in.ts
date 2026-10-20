@@ -5,6 +5,7 @@ import { ROLE_HOME } from '../../core/theme/auth/role-home';
 import { SignInError, SignInRequest } from '../../core/theme/auth/auth.models';
 import { BrandPanel } from './components/brand-panel/brand-panel';
 import { SignInForm } from './components/sign-in-form/sign-in-form';
+import { finalize } from 'rxjs';
 
 
 @Component({
@@ -13,6 +14,7 @@ import { SignInForm } from './components/sign-in-form/sign-in-form';
   templateUrl: './sign-in.html',
   styleUrl: './sign-in.css',
 })
+
 export class SignIn {
   private auth = inject(AuthService);
   private router = inject(Router);
@@ -28,11 +30,12 @@ export class SignIn {
     this.loading.set(true);
     this.error.set(null);
 
-    this.auth.SignIn(req).subscribe({
+    this.auth.SignIn(req)
+    .pipe(finalize(() => this.loading.set(false)))
+    .subscribe({
       next: user => this.router.navigateByUrl(ROLE_HOME[user.role]),
       error: (err: SignInError) => {
         this.error.set(err);
-        this.loading.set(false);
       },
     });
   }
