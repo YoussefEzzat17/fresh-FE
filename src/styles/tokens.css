@@ -98,11 +98,16 @@
   --ds-rail-breakpoint: 1180px;
   --ds-rail-radius: 24px;
   --ds-rail-tab-radius: 16px; /* tab outer radius */
-  --ds-rail-curve: 20px; /* concave curves above/below the tab */
   --ds-rail-tab-bg: var(--ds-page); /* content surface the tab flows into */
   --ds-rail-edge-gap: 16px;
   --ds-rail-text: #e3ecfb;
   --ds-rail-hover: rgb(255 255 255 / 0.1);
   --ds-rail-hover-duration: 250ms;
   --ds-rail-tab-duration: 380ms;
+
+  /* Bottom navigation (phone) [PDF] */
+  --ds-bottom-nav-breakpoint: 768px; /* below this the bottom nav replaces the rail */
+  --ds-bottom-nav-height: 68px;
+  --ds-bottom-nav-gap: 16px; /* distance from the screen sides */
+  --ds-bar-edge-y: 20px; /* distance of the app bar from the top and the bottom nav from the bottom */
 }

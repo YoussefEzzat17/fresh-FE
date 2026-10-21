@@ -1,12 +1,12 @@
 import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { AuthService } from '../../core/theme/auth/auth.service';
-import { ROLE_HOME } from '../../core/theme/auth/role-home';
-import { SignInError, SignInRequest } from '../../core/theme/auth/auth.models';
-import { BrandPanel } from './components/brand-panel/brand-panel';
-import { SignInForm } from './components/sign-in-form/sign-in-form';
 import { finalize } from 'rxjs';
 
+import { SignInError, SignInRequest } from '../../core/theme/auth/auth.models';
+import { AuthService } from '../../core/theme/auth/auth.service';
+import { ROLE_HOME } from '../../core/theme/auth/role-home';
+import { BrandPanel } from './components/brand-panel/brand-panel';
+import { SignInForm } from './components/sign-in-form/sign-in-form';
 
 @Component({
   selector: 'app-sign-in',

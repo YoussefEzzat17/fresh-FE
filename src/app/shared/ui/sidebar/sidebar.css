@@ -135,6 +135,10 @@
   height: 24px;
   font-size: 18px;
 }
+.icon i,
+.logo i {
+  font-size: inherit;
+}
 .label {
   flex: 1;
   min-width: 0;
@@ -213,33 +217,6 @@
   box-shadow: 0 0 0 2px #fff;
 }
 
-/* Concave curves above and below the tab, where the blue wraps round it */
-.item.active::before,
-.item.active::after {
-  content: '';
-  position: absolute;
-  inset-inline-end: -12px; /* the rail edge: rail padding (12px) outside the item */
-  width: var(--ds-rail-curve);
-  height: var(--ds-rail-curve);
-  pointer-events: none;
-}
-.item.active::before {
-  bottom: 100%;
-  background: radial-gradient(
-    circle at 100% 100%,
-    var(--ds-rail-tab-bg) calc(var(--ds-rail-curve) - 0.5px),
-    var(--ds-color-brand) var(--ds-rail-curve)
-  );
-}
-.item.active::after {
-  top: 100%;
-  background: radial-gradient(
-    circle at 100% 0,
-    var(--ds-rail-tab-bg) calc(var(--ds-rail-curve) - 0.5px),
-    var(--ds-color-brand) var(--ds-rail-curve)
-  );
-}
-
 @keyframes ds-tab-in {
   from {
     opacity: 0;
@@ -302,6 +279,12 @@
 }
 :host(.compact) .rail-toggle {
   margin-inline-start: 0;
+}
+:host(.compact) .icon {
+  font-size: 22px;
+}
+:host(.compact) .icon {
+  font-size: 22px;
 }
 :host(.compact) .link {
   justify-content: center;

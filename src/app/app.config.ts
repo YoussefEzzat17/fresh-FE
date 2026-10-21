@@ -1,5 +1,5 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { providePrimeNG } from 'primeng/config';
 import { DspPreset } from './core/theme/dsp-preset';
 import { routes } from './app.routes';
@@ -7,7 +7,7 @@ import { routes } from './app.routes';
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes),
+    provideRouter(routes, withComponentInputBinding()),
 
     providePrimeNG({
       theme: {
