@@ -11,9 +11,9 @@
   align-items: center;
   gap: 10px;
   min-height: 64px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   box-sizing: border-box;
-  border-radius: 30px;
+  border-radius: 28px;
   background: var(--ds-color-brand);
   box-shadow: var(--ds-shadow-3);
   color: #fff;

@@ -98,6 +98,7 @@
   --ds-rail-breakpoint: 1180px;
   --ds-rail-radius: 24px;
   --ds-rail-tab-radius: 16px; /* tab outer radius */
+  --ds-rail-curve: 12px; /* rounded blue corners above/below the active tab */
   --ds-rail-tab-bg: var(--ds-page); /* content surface the tab flows into */
   --ds-rail-edge-gap: 16px;
   --ds-rail-text: #e3ecfb;
