@@ -19,6 +19,7 @@
 }
 
 .tab {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -41,10 +42,42 @@
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
+/* Active tab: reaches the bar's top edge and opens into the page above */
 .tab.active {
+  z-index: 1;
+  margin-top: -8px;               /* = bar padding-top, so the tab touches the top edge */
+  padding-top: 8px;               /* keeps the icon and label in the same place */
+  border-radius: 0 0 20px 20px;   /* rounded at the bottom only, open at the top */
   background: var(--ds-page);
   color: var(--ds-blue-800);
   font-weight: 700;
+}
+
+/* Concave curves: the blue bar gets rounded corners left and right of the tab */
+.tab.active::before,
+.tab.active::after {
+  content: '';
+  position: absolute;
+  top: 0;                          /* the bar's top edge */
+  width: var(--ds-rail-curve);
+  height: var(--ds-rail-curve);
+  pointer-events: none;
+}
+.tab.active::before {
+  right: 100%;
+  background: radial-gradient(
+    circle at 0 100%,
+    var(--ds-color-brand) calc(var(--ds-rail-curve) - 0.5px),
+    var(--ds-page) var(--ds-rail-curve)
+  );
+}
+.tab.active::after {
+  left: 100%;
+  background: radial-gradient(
+    circle at 100% 100%,
+    var(--ds-color-brand) calc(var(--ds-rail-curve) - 0.5px),
+    var(--ds-page) var(--ds-rail-curve)
+  );
 }
 .tab.active:focus-visible {
   outline-color: var(--ds-color-focus);

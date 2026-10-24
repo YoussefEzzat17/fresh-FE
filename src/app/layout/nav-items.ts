@@ -32,13 +32,13 @@ export const NAV_BY_ROLE: Record<Role, RoleNav> = {
     userRole: 'Customer Service Agent',
     items: [
       { id: 'home', label: 'Home', icon: 'pi pi-home' },
-      { id: 'search', label: 'Customer search', icon: 'pi pi-search' },
+      { id: 'customer-search', label: 'Customer search', icon: 'pi pi-search' },
       { id: 'tickets', label: 'My tickets', icon: 'pi pi-ticket', badge: { count: 8, tone: 'open' } },
       { id: 'alerts', label: 'Notifications', icon: 'pi pi-bell', badge: { count: 3, tone: 'action' } },
     ],
     phoneItems: [
       { id: 'home', label: 'Home', icon: 'pi pi-home' },
-      { id: 'search', label: 'Search', icon: 'pi pi-search' },
+      { id: 'customer-search', label: 'Search', icon: 'pi pi-search' },
       { id: 'tickets', label: 'Tickets', icon: 'pi pi-ticket', badge: { count: 8, tone: 'open' } },
       { id: 'alerts', label: 'Alerts', icon: 'pi pi-bell', badge: { count: 3, tone: 'action' } },
     ],
