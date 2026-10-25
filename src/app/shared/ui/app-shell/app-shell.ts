@@ -57,7 +57,7 @@ const MAX_PHONE_ITEMS = 5;
       />
     }
 
-    <main class="content">
+    <main class="content ">
       <ng-content />
     </main>
 

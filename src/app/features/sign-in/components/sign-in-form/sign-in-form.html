@@ -36,8 +36,10 @@
              [class.!ring-danger/20]="invalid('username') || error() === 'invalid'"
              [attr.aria-invalid]="invalid('username')" aria-describedby="username-err" />
     </div>
-    @if (invalid('username')) {
-      <span id="username-err" class="text-xs text-danger">Enter your username.</span>
+    @if (errorFor('username'); as msg) {
+      <span id="username-err" class="flex items-center gap-1.5 text-xs text-danger">
+        <i class="pi pi-info-circle text-[11px]"></i> {{ msg }}
+      </span>
     }
   </div>
 
@@ -47,6 +49,7 @@
     <div class="relative">
       <i class="pi pi-lock pointer-events-none absolute inset-s-3.5 top-1/2 -translate-y-1/2 text-ink-3"></i>
       <input id="password" formControlName="password" autocomplete="current-password"
+             maxlength="8"
              [type]="showPassword() ? 'text' : 'password'"
              class="h-12 w-full rounded-control border bg-white ps-11 pe-13 text-sm outline-none transition
                     focus:border-brand focus:ring-4 focus:ring-brand/15"
@@ -64,8 +67,10 @@
       </button>
       
     </div>
-    @if (invalid('password')) {
-      <span id="password-err" class="text-xs text-danger">Enter your password.</span>
+    @if (errorFor('password'); as msg) {
+      <span id="password-err" class="flex items-center gap-1.5 text-xs text-danger">
+        <i class="pi pi-info-circle text-[11px]"></i> {{ msg }}
+      </span>
     }
   </div>
 
