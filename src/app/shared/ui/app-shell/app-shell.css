@@ -24,6 +24,6 @@ ds-sidebar {
   padding: 0;
 }
 :host(.phone) .content {
-  padding: 20px var(--ds-bottom-nav-gap)
+  padding: 40px var(--ds-bottom-nav-gap)
     calc(var(--ds-bottom-nav-height) + 2 * var(--ds-bar-edge-y) + env(safe-area-inset-bottom));
 }

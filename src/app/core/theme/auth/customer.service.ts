@@ -1,10 +1,26 @@
-import { Injectable } from '@angular/core';
-import { Customer } from '../../../features/customer-search/customer.models';
-import { CUSTOMERS } from '../../../features/customer-search/customers.mock';
+import { Injectable, signal } from '@angular/core';
+import {
+  ActivityEvent,
+  Customer,
+  Incident,
+  NewTicketDraft,
+  Ticket,
+} from '../../../features/customer-search/customer.models';
+import { ACTIVITY, CUSTOMERS, INCIDENTS, TICKETS } from '../../../features/customer-search/customers.mock';
 
+/**
+ * Customers, their tickets and logs, and who has been verified on this call.
+ * TODO: replace the mock data with HttpClient calls when the APIs are ready.
+ */
 @Injectable({ providedIn: 'root' })
 export class CustomerService {
-  private readonly customers = CUSTOMERS; // TODO: replace with HttpClient when the API is ready
+  private readonly customers = CUSTOMERS;
+  private readonly tickets = signal<Ticket[]>(TICKETS);
+  /** CIF → time the caller passed verification. Ahmed starts verified, as in the design. */
+  private readonly verifiedAt = signal(new Map<string, Date>([['123456', new Date()]]));
+
+  /** Last search, so going back to Customer search shows the same results. */
+  readonly lastQuery = signal('');
 
   /** Numbers → search by CIF (starts with). Letters → search by name (contains). */
   search(term: string): Customer[] {
@@ -15,5 +31,62 @@ export class CustomerService {
     return this.customers.filter(c =>
       isCif ? c.cif.startsWith(q) : c.name.toLowerCase().includes(q),
     );
+  }
+
+  getByCif(cif: string): Customer | undefined {
+    return this.customers.find(c => c.cif === cif);
+  }
+
+  // ---------- verification ----------
+  isVerified(cif: string): boolean {
+    return this.verifiedAt().has(cif);
+  }
+
+  verifiedTime(cif: string): Date | undefined {
+    return this.verifiedAt().get(cif);
+  }
+
+  markVerified(cif: string) {
+    // New Map, so the signal sees a new reference.
+    this.verifiedAt.update(map => new Map(map).set(cif, new Date()));
+  }
+
+  endVerification(cif: string) {
+    this.verifiedAt.update(map => {
+      const next = new Map(map);
+      next.delete(cif);
+      return next;
+    });
+  }
+
+  // ---------- tickets & logs ----------
+  ticketsFor(cif: string): Ticket[] {
+    return this.tickets()
+      .filter(t => t.cif === cif)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  activityFor(cif: string): ActivityEvent[] {
+    return ACTIVITY.filter(e => e.cif === cif).sort((a, b) => b.at.getTime() - a.at.getTime());
+  }
+
+  incidentFor(category: string, platform: string): Incident | undefined {
+    return INCIDENTS.find(i => i.category === category && i.platform === platform);
+  }
+
+  createTicket(draft: NewTicketDraft): Ticket {
+    const nextId = Math.max(...this.tickets().map(t => Number(t.id))) + 1;
+    const ticket: Ticket = {
+      id: String(nextId),
+      cif: draft.cif,
+      title: draft.issue,
+      status: 'open',
+      priority: draft.priority,
+      platform: draft.platform,
+      createdAt: new Date(),
+      report: draft.report,
+    };
+    this.tickets.update(list => [ticket, ...list]);
+    return ticket;
   }
 }

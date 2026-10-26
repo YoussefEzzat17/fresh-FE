@@ -19,7 +19,7 @@ export class VerifyCallerDialog {
 
   checkedCount = computed(() => [this.nameDob(), this.city(), this.otp()].filter(Boolean).length);
   /** Two of the three checks must pass. */
-  canConfirm = computed(() => this.checkedCount() >= 2);
+  canConfirm = computed(() => this.checkedCount() >= 3);
 
   firstName = computed(() => this.customer().name.split(' ')[0]);
   maskedMobile = computed(() => maskMobile(this.customer().mobile));

@@ -1,7 +1,6 @@
 import { Routes } from '@angular/router';
 
 import { authGuard } from './core/theme/auth/auth.guard';
-import { CustomerSearch } from './features/customer-search/customer-search';
 
 const placeholder = () => import('./features/placeholder/placeholder').then(m => m.Placeholder);
 
@@ -14,7 +13,9 @@ export const routes: Routes = [
     children: [
       { path: 'home', loadComponent: placeholder, data: { title: 'Home' } },
       { path: 'tickets', loadComponent: placeholder, data: { title: 'My tickets' } },
-      { path: 'customer-search', component: CustomerSearch },
+      { path: 'customer-search', loadComponent: () => import('./features/customer-search/customer-search').then(m => m.CustomerSearch) },
+      { path: 'customer-search/:cif', loadComponent: () => import('./features/customer-360/customer-360').then(m => m.Customer360) },
+      { path: 'customer-search/:cif/new-ticket', loadComponent: () => import('./features/new-ticket/new-ticket').then(m => m.NewTicket) },
       { path: 'review', loadComponent: placeholder, data: { title: 'Review queue' } },
       { path: 'library', loadComponent: placeholder, data: { title: 'Guide library' } },
       { path: 'triage', loadComponent: placeholder, data: { title: 'Triage' } },
