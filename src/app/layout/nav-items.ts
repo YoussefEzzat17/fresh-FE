@@ -40,7 +40,6 @@ export const NAV_BY_ROLE: Record<Role, RoleNav> = {
       { id: 'home', label: 'Home', icon: 'pi pi-home' },
       { id: 'customer-search', label: 'Search', icon: 'pi pi-search' },
       { id: 'tickets', label: 'Tickets', icon: 'pi pi-ticket', badge: { count: 8, tone: 'open' } },
-      { id: 'alerts', label: 'Alerts', icon: 'pi pi-bell', badge: { count: 3, tone: 'action' } },
     ],
   },
   guide: {

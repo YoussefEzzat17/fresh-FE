@@ -25,16 +25,16 @@ export class SignInForm {
 private messages: Record<'username' | 'password', { key: string; text: string }[]> = {
   username: [
     { key: 'required',          text: 'Please enter your username.' },
-    { key: 'minlength',         text: 'Username is too short. Write at least 3 characters.' },
-    { key: 'startsWithCapital', text: 'Start your username with a capital letter' },
+    { key: 'minlength',         text: 'Please enter correct username.' },
+    { key: 'startsWithCapital', text: 'Please enter correct username.' },
   ],
   password: [
     { key: 'required',          text: 'Please enter your password.' },
-    { key: 'startsWithCapital', text: 'Start your password with a capital letter' },
-    { key: 'lowercase',         text: 'Add at least one small letter (a–z) to your password.' },
-    { key: 'number',            text: 'Add at least one number (0–9) to your password.' },
-    { key: 'special',           text: 'Add a symbol like @ or # to your password.' },
-    { key: 'minLength',         text: 'Your password must be 8 characters.' },
+    { key: 'startsWithCapital', text: 'Please enter correct password.' },
+    { key: 'lowercase',         text: 'Please enter correct password.' },
+    { key: 'number',            text: 'Please enter correct password.' },
+    { key: 'special',           text: 'Please enter correct password.' },
+    { key: 'minLength',         text: 'Please enter correct password.' },
   ],
 };
 

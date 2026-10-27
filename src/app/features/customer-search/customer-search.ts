@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { CustomerService } from '../../core/theme/auth/customer.service';
 import { Customer, DigitalStatus, maskMobile } from './customer.models';
 import { VerifyCallerDialog } from './components/verify-caller-dialog/verify-caller-dialog';
@@ -15,16 +16,16 @@ const SEARCH_PATTERN = /^(\d+|[A-Za-z؀-ۿ\s]+)$/;
 })
 export class CustomerSearch {
   private service = inject(CustomerService);
+  private router = inject(Router);
 
-  search = new FormControl('', { nonNullable: true });
+  // Start from the last search, so "back" from Customer 360 keeps the results.
+  search = new FormControl(this.service.lastQuery(), { nonNullable: true });
   /** Changes only when the user presses Search. */
-  query = signal('');
+  query = signal(this.service.lastQuery());
 
   invalidQuery = computed(() => !!this.query() && !SEARCH_PATTERN.test(this.query()));
   results = computed(() => (this.invalidQuery() ? [] : this.service.search(this.query())));
 
-  /** CIFs whose caller passed verification (Ahmed starts verified, as in the design). */
-  verified = signal(new Set<string>(['123456']));
   /** Customer the verify popup is open for. */
   verifying = signal<Customer | null>(null);
 
@@ -43,7 +44,9 @@ export class CustomerSearch {
   mask = maskMobile;
 
   onSearch() {
-    this.query.set(this.search.value.trim());
+    const q = this.search.value.trim();
+    this.query.set(q);
+    this.service.lastQuery.set(q);
   }
 
   useExample(cif: string) {
@@ -51,13 +54,13 @@ export class CustomerSearch {
     this.onSearch();
   }
 
+  /** Verification lives in the service, so Customer 360 and New ticket know about it too. */
   isVerified(c: Customer) {
-    return this.verified().has(c.cif);
+    return this.service.isVerified(c.cif);
   }
 
   onConfirmed(c: Customer) {
-    // A new Set, so the signal sees a new reference and the view updates.
-    this.verified.update(set => new Set(set).add(c.cif));
+    this.service.markVerified(c.cif);
     this.verifying.set(null);
   }
 
@@ -66,7 +69,6 @@ export class CustomerSearch {
   }
 
   open360(c: Customer) {
-    // TODO: navigate to the Customer 360 page
-    console.log('open 360', c.cif);
+    this.router.navigate(['/customer-search', c.cif]);
   }
 }
