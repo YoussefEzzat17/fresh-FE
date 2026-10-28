@@ -5,7 +5,7 @@ import { Observable, switchMap, throwError, timer, map } from 'rxjs';
 /** 5 wrong tries within 15 minutes lock the account for 15 minutes. */
 const MAX_ATTEMPTS = 5;
 const ATTEMPT_WINDOW_MS = 15 * 60_000;
-export const LOCK_MS = 15 * 10_000;
+export const LOCK_MS = 15 * 1_000;
 
 /** localStorage keys, so a refresh or a new tab can't skip the lock. */
 const LOCK_KEY = 'dsp.signin.lock';
@@ -32,10 +32,10 @@ export class AuthService {
 
     SignIn(req: SignInRequest): Observable<User> {
         const users: Record<string, User>={
-            'mona.hassan': {
-                username: 'mona.hassan',
-                password: 'Mona@123',
-                name: 'Mona Hassan',
+            'rwan.albagory': {
+                username: 'rwan.albagory',
+                password: 'Rwan@123',
+                name: 'Rwan Albagory',
                 role: 'agent' 
             },
             'youssef.adel': { 

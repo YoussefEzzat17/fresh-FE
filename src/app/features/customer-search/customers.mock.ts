@@ -22,10 +22,10 @@ export const CUSTOMERS: Customer[] = [
 /** Builds a ticket with the parts every mock ticket shares. */
 function ticket(t: Omit<Ticket, 'assignee' | 'notes' | 'timeline'> & Partial<Pick<Ticket, 'notes' | 'timeline'>>): Ticket {
   const timeline = t.timeline ?? [
-    { at: t.createdAt, actor: t.origin === 'monitor' ? 'Monitor job' : 'Mona Hassan', text: t.origin === 'monitor' ? `Auto-created from ${t.errorCode}` : 'Ticket created' },
+    { at: t.createdAt, actor: t.origin === 'monitor' ? 'Monitor job' : 'Rwan Albagory', text: t.origin === 'monitor' ? `Auto-created from ${t.errorCode}` : 'Ticket created' },
     ...(t.adoItem ? [{ at: new Date(t.createdAt.getTime() + 2 * 60_000), actor: 'System', text: `Escalated to SRE as ${t.adoItem}` }] : []),
   ];
-  return { assignee: 'mona.hassan', notes: [], ...t, timeline };
+  return { assignee: 'rwan.albagory', notes: [], ...t, timeline };
 }
 
 const LOGIN_FAILED = {
