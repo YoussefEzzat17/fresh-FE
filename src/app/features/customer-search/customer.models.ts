@@ -17,17 +17,51 @@ export interface Customer {
   openTickets: number;
 }
 
-export type TicketStatus = 'open' | 'with-sre' | 'resolved' | 'closed';
+/**
+ * new      → created, nobody worked it yet
+ * open     → the agent is working it
+ * with-sre → escalated to SRE (Azure DevOps work item)
+ * fixed    → SRE says it's fixed; the agent must confirm with the customer
+ * resolved / closed → done
+ */
+export type TicketStatus = 'new' | 'open' | 'with-sre' | 'fixed' | 'resolved' | 'closed';
+
+export interface TicketNote {
+  at: Date;
+  author: string;
+  text: string;
+}
+
+export interface TicketEvent {
+  at: Date;
+  actor: string;
+  text: string;
+}
 
 export interface Ticket {
   id: string;
   cif: string;
   title: string;
+  category: string;
   status: TicketStatus;
   priority: DsPriority;
   platform: Platform;
   createdAt: Date;
+  /** Username of the agent who owns the ticket. */
+  assignee: string;
+  /** "monitor" = auto-created by the log monitor job. */
+  origin: 'monitor' | 'agent';
+  errorCode?: string;
+  adoItem?: string;
+  sreOwner?: string;
+  incidentId?: string;
+  transactionRef?: string;
+  device?: string;
   report?: string;
+  lastSreAskAt?: Date;
+  resolvedAt?: Date;
+  notes: TicketNote[];
+  timeline: TicketEvent[];
 }
 
 /** One event from the customer's digital banking logs. */
@@ -48,6 +82,17 @@ export interface Incident {
   adoItem: string;
   category: string;
   platform: Platform;
+  summary: string;
+  errorCode: string;
+  sreState: string;
+  /** What the agent can say to callers. */
+  customerScript: string;
+}
+
+export interface ServiceHealth {
+  name: string;
+  errorsPerHour: number;
+  state: 'ok' | 'warn' | 'bad';
 }
 
 /** What the New ticket form sends to the service. */

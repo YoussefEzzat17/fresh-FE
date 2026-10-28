@@ -32,7 +32,7 @@
     @if (openTicket(); as t) {
       <ds-callout tone="warning" icon="pi pi-clone" [heading]="'Already open: #' + t.id">
         {{ t.title }} is still open for this customer. Use it instead of creating a duplicate.
-        <button dsCalloutActions type="button" (click)="cancel()"
+        <button dsCalloutActions type="button" [routerLink]="['/tickets', t.id]"
                 class="h-9 shrink-0 rounded-control border border-line-2 bg-white px-4 text-xs font-bold text-ink hover:bg-page">
           Open #{{ t.id }}
         </button>
