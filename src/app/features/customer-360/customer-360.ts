@@ -3,10 +3,10 @@ import { DatePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { DsPriorityBadge, DsStatusPill, DsTone } from '../../shared/ui';
 import { CustomerService } from '../../core/theme/auth/customer.service';
+import { TICKET_STATUS, TicketService } from '../../core/theme/auth/ticket.service';
 import {
   DigitalStatus,
   Platform,
-  TicketStatus,
   maskMobile,
   maskNationalId,
 } from '../customer-search/customer.models';
@@ -27,6 +27,7 @@ const RANGES: { id: RangeId; label: string; minutes: number }[] = [
 })
 export class Customer360 {
   private service = inject(CustomerService);
+  private ticketService = inject(TicketService);
   private router = inject(Router);
 
   /** From the URL /customer-search/:cif (withComponentInputBinding). */
@@ -35,7 +36,7 @@ export class Customer360 {
   customer = computed(() => this.service.getByCif(this.cif()));
   verified = computed(() => this.service.isVerified(this.cif()));
   verifiedAt = computed(() => this.service.verifiedTime(this.cif()));
-  tickets = computed(() => this.service.ticketsFor(this.cif()));
+  tickets = computed(() => this.ticketService.forCustomer(this.cif()));
   activity = computed(() => this.service.activityFor(this.cif()));
 
   // ---------- activity log filters ----------
@@ -86,12 +87,7 @@ export class Customer360 {
 
   statusTone: Record<DigitalStatus, DsTone> = { active: 'success', locked: 'danger', inactive: 'neutral' };
 
-  ticketStatus: Record<TicketStatus, { label: string; tone: DsTone }> = {
-    open: { label: 'Open', tone: 'info' },
-    'with-sre': { label: 'With SRE', tone: 'sre' },
-    resolved: { label: 'Resolved', tone: 'success' },
-    closed: { label: 'Closed', tone: 'neutral' },
-  };
+  ticketStatus = TICKET_STATUS;
 
   initials(name: string) {
     return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();

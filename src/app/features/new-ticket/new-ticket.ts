@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 import { DsCallout, DsPriority, DsPriorityBadge, PRIORITY_META } from '../../shared/ui';
 import { CustomerService } from '../../core/theme/auth/customer.service';
+import { TicketService } from '../../core/theme/auth/ticket.service';
 import { Platform } from '../customer-search/customer.models';
 
 /** Category → its issues. TODO: load from the error-rules API. */
@@ -24,6 +25,7 @@ const CATEGORIES: Record<string, string[]> = {
 })
 export class NewTicket {
   private service = inject(CustomerService);
+  private tickets = inject(TicketService);
   private router = inject(Router);
 
   /** From the URL /customer-search/:cif/new-ticket. */
@@ -37,7 +39,7 @@ export class NewTicket {
 
   /** An open ticket already exists → warn before creating a duplicate. */
   openTicket = computed(() =>
-    this.service.ticketsFor(this.cif()).find(t => t.status === 'open' || t.status === 'with-sre'),
+    this.tickets.forCustomer(this.cif()).find(t => !this.tickets.isDone(t)),
   );
 
   categoryNames = Object.keys(CATEGORIES);
@@ -81,8 +83,8 @@ export class NewTicket {
       this.form.markAllAsTouched();
       return;
     }
-    this.service.createTicket({ cif: this.cif(), ...this.form.getRawValue() });
-    this.router.navigate(['/customer-search', this.cif()]);
+    const ticket = this.tickets.create({ cif: this.cif(), ...this.form.getRawValue() });
+    this.router.navigate(['/tickets', ticket.id]);
   }
 
   cancel() {
