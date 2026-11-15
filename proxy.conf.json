@@ -1,0 +1,7 @@
+{
+  "/api": {
+    "target": "https://support-desk-production-9e0073a3.up.railway.app",
+    "secure": true,
+    "changeOrigin": true
+  }
+}

@@ -1,25 +1,33 @@
-import { computed, Injectable, signal } from "@angular/core";
-import { SignInError, SignInRequest, User } from "./auth.models";
-import { Observable, switchMap, throwError, timer, map } from 'rxjs';
+import { computed, inject, Injectable, signal } from "@angular/core";
+import { HttpClient, HttpErrorResponse } from "@angular/common/http";
+import { Role, SignInError, SignInRequest, User } from "./auth.models";
+import { Observable, catchError, from, map, switchMap, throwError } from 'rxjs';
 
-/** 5 wrong tries within 15 minutes lock the account for 15 minutes. */
-const MAX_ATTEMPTS = 5;
-const ATTEMPT_WINDOW_MS = 15 * 60_000;
+/** The server enforces the real lockout (5 tries / 15 min). Kept for the countdown UI. */
 export const LOCK_MS = 15 * 1_000;
 
-/** localStorage keys, so a refresh or a new tab can't skip the lock. */
+/** localStorage keys, so a refresh or a new tab keeps the session and the lock. */
 const LOCK_KEY = 'dsp.signin.lock';
-const FAILED_KEY = 'dsp.signin.failedAt';
+const ACCESS_KEY = 'dsp.auth.accessToken';
+const REFRESH_KEY = 'dsp.auth.refreshToken';
 
 export interface AccountLock {
     username: string;
     until: Date;
 }
 
+/** What POST /api/auth/login returns. */
+interface LoginResponse {
+    accessToken: string;
+    refreshToken: string;
+}
+
 @Injectable({ providedIn: 'root'})
 export class AuthService {
 
-    private readonly _user = signal<User | null>(null);
+    private readonly http = inject(HttpClient);
+
+    private readonly _user = signal<User | null>(this.restoreUser());
     readonly user = this._user.asReadonly();
     readonly isSignIn = computed(() => this._user() !==null);
 
@@ -27,48 +35,83 @@ export class AuthService {
     private readonly _lock = signal<AccountLock | null>(this.readLock());
     readonly lock = this._lock.asReadonly();
 
-    /** Times of recent failed attempts, whatever username was typed. */
-    private failedAt: number[] = this.read<number[]>(FAILED_KEY) ?? [];
-
     SignIn(req: SignInRequest): Observable<User> {
-        const users: Record<string, User>={
-            'rwan.albagory': {
-                username: 'rwan.albagory',
-                password: 'Rwan@123',
-                name: 'Rwan Albagory',
-                role: 'agent' 
-            },
-            'youssef.adel': { 
-                username: 'youssef.adel', 
-                password: 'Yous@123',
-                name: 'Youssef Adel', 
-                role: 'guide' 
-            },
-            'nour.saleh': { 
-                username: 'nour.saleh',
-                password: 'Nour@123', 
-                name: 'Nour Saleh', 
-                role: 'reviewer' 
-            },
-        };
+        const username = req.username.trim();
+        return from(this.sha256Hex(req.password)).pipe(
+            switchMap(passwordHash => this.http.post<LoginResponse>('/api/auth/login', {
+                username,
+                password: passwordHash,
+            })),
+            map(res => this.onLoggedIn(res)),
+            catchError((err: HttpErrorResponse) => throwError(() => this.toSignInError(err))),
+        );
+    }
 
-        const key = req.username.trim().toLowerCase();
+    private async sha256Hex(password: string): Promise<string> {
+        const data = new TextEncoder().encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        return Array.from(new Uint8Array(hashBuffer))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
+    }
 
-        // Still locked → refuse without checking the password.
-        const lock = this._lock();
-        if (lock && lock.until.getTime() > Date.now()) {
-            return this.fail('locked');
-        }
-
-        const user = users[key];
-        if (!user || user.password !== req.password) {
-            return this.fail(this.recordFailure(key));
-        }
-
-        this.failedAt = [];
-        this.save(FAILED_KEY, null);
+    /** Stores the tokens, builds the user from the access token, and marks us signed in. */
+    private onLoggedIn(res: LoginResponse): User {
+        this.saveToken(ACCESS_KEY, res.accessToken);
+        this.saveToken(REFRESH_KEY, res.refreshToken);
+        const user = this.userFromToken(res.accessToken);
         this._user.set(user);
-        return timer(600).pipe(map(() => user));
+        return user;
+    }
+
+    /** The access token for the HTTP interceptor to attach (null = not signed in). */
+    accessToken(): string | null {
+        try {
+            return localStorage.getItem(ACCESS_KEY);
+        } catch {
+            return null;
+        }
+    }
+
+    /** The refresh token from the last login (null = none stored). */
+    refreshToken(): string | null {
+        try {
+            return localStorage.getItem(REFRESH_KEY);
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Trades the refresh token for a new access token and stores it.
+     * Errors (no token, or the backend rejected it) are left to the caller, which signs out.
+     */
+    refresh(): Observable<string> {
+        const refreshToken = this.refreshToken();
+        if (!refreshToken) return throwError(() => new Error('No refresh token'));
+
+        return this.http.post<LoginResponse>('/api/auth/refresh', { refreshToken }).pipe(
+            map(res => {
+                this.onLoggedIn(res);
+                return res.accessToken;
+            }),
+        );
+    }
+
+    /** On startup, bring the session back from a stored access token. */
+    private restoreUser(): User | null {
+        const token = this.accessToken();
+        if (!token) return null;
+
+        const payload = this.decodeJwt(token);
+        if (!payload) return null;
+
+
+        if (payload.exp && payload.exp * 1000 <= Date.now() && !this.refreshToken()) {
+            this.saveToken(ACCESS_KEY, null);
+            return null;
+        }
+        return this.userFromToken(token);
     }
 
     /** Called when the lock timer ended and the user goes back to the form. */
@@ -79,22 +122,44 @@ export class AuthService {
 
     signOut() {
         this._user.set(null);
+        this.saveToken(ACCESS_KEY, null);
+        this.saveToken(REFRESH_KEY, null);
     }
 
-    /** Counts a wrong try; the 5th one in 15 minutes locks the account. */
-    private recordFailure(key: string): SignInError {
-        const now = Date.now();
-        this.failedAt = this.failedAt.filter(t => now - t < ATTEMPT_WINDOW_MS);
-        this.failedAt.push(now);
-    
-        this.save(FAILED_KEY, this.failedAt);
+    /** The JWT payload carries the username (sub) and the role. */
+    private userFromToken(token: string): User {
+        const payload = this.decodeJwt(token);
+        return {
+            username: payload?.sub ?? '',
+            password: '',
+            name: payload?.sub ?? '',
+            role: this.mapRole(payload?.role),
+        };
+    }
 
-        if (this.failedAt.length >= MAX_ATTEMPTS) {
-            this.failedAt = [];
-            this.save(FAILED_KEY, null);
-            const lock = { username: key, until: new Date(now + LOCK_MS) };
-            this._lock.set(lock);
-            this.save(LOCK_KEY, lock);
+    /** Reads the middle part of the JWT (base64url) without verifying it. */
+    private decodeJwt(token: string): { sub?: string; role?: string; exp?: number } | null {
+        try {
+            const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+            return JSON.parse(atob(base64));
+        } catch {
+            return null;
+        }
+    }
+
+    /** Backend roles (AGENT / GUIDE_ADMIN / REVIEWER) → the frontend Role. */
+    private mapRole(role: string | undefined): Role {
+        switch (role) {
+            case 'GUIDE_ADMIN': return 'guide';
+            case 'REVIEWER': return 'reviewer';
+            default: return 'agent';
+        }
+    }
+
+    /** 423 (or a lock code) means the account is locked; anything else is wrong credentials. */
+    private toSignInError(err: HttpErrorResponse): SignInError {
+        const code = err?.error?.code as string | undefined;
+        if (err?.status === 423 || code === 'ACCOUNT_LOCKED' || code === 'USER_LOCKED') {
             return 'locked';
         }
         return 'invalid';
@@ -124,8 +189,13 @@ export class AuthService {
         }
     }
 
-    /** Wait 600ms like a real request, then fail. (delay() does not delay errors, timer + switchMap does.) */
-    private fail(error: SignInError): Observable<never> {
-        return timer(600).pipe(switchMap(() => throwError(() => error)));
+    /** Tokens are stored raw (not JSON) so the interceptor can read them directly. */
+    private saveToken(key: string, value: string | null) {
+        try {
+            if (value === null) localStorage.removeItem(key);
+            else localStorage.setItem(key, value);
+        } catch {
+            // storage unavailable
+        }
     }
 }
