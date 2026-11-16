@@ -53,15 +53,15 @@
           </div>
         </div>
 
-        @if (error() === 'invalid') {
+        @if (error()?.type === 'invalid') {
           <ds-status-pill tone="danger" class="mt-7">Invalid credentials</ds-status-pill>
-        } @else if (error() === 'expired') {
+        } @else if (error()?.type === 'expired') {
           <ds-status-pill tone="info" class="mt-7">Session expired</ds-status-pill>
         }
   
         <h1 id="signin-title" class="text-[30px] leading-9.5 font-extrabold tracking-tight text-ink"
-            [class.mt-3]="error() === 'invalid' || error() === 'expired'"
-            [class.mt-7]="error() !== 'invalid' && error() !== 'expired'">
+            [class.mt-3]="error()?.type === 'invalid' || error()?.type === 'expired'"
+            [class.mt-7]="error()?.type !== 'invalid' && error()?.type !== 'expired'">
           Sign in
         </h1>
         <p class="mt-2 text-[14.5px] leading-5.5 text-ink-3">
