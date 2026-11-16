@@ -37,7 +37,9 @@ export class SignIn {
   });
 
   /** Share of the 15 minutes already passed, for the bar. */
-  lockProgress = computed(() => Math.round(100 - (this.lockLeft() / LOCK_MS) * 100));
+  lockProgress = computed(() =>
+    Math.min(100, Math.max(0, Math.round(100 - (this.lockLeft() / LOCK_MS) * 100))),
+  );
 
   /** 585000 ms → "9:45" */
   lockLabel = computed(() => {
@@ -60,9 +62,14 @@ export class SignIn {
     this.auth.SignIn(req)
     .pipe(finalize(() => this.loading.set(false)))
     .subscribe({
-      next: user => this.router.navigateByUrl(ROLE_HOME[user.role]),
+      next: user => {
+        this.loading.set(false);
+        this.error.set(null);
+        this.router.navigateByUrl(ROLE_HOME[user.role]);
+      },
       error: (err: SignInError) => {
         this.error.set(err);
+        this.loading.set(false);
       },
     });
   }
@@ -70,6 +77,9 @@ export class SignIn {
   /** The timer ended: back to the form, with "Session expired" and "Please sign in again". */
   backToSignIn() {
     this.auth.clearLock();
-    this.error.set('expired');
+    this.error.set({
+      type: 'expired',
+      message: 'Session expired',
+    });
   }
 }

@@ -1,16 +1,22 @@
 <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4.5" novalidate>
 
-  @switch (error()) {
+  @switch (error()?.type) {
     @case ('invalid') {
       <div role="alert" class="flex gap-2.5 rounded-[14px] border border-danger/30 bg-danger-tint p-3 text-[13px] leading-4.75 text-danger">
         <i class="pi pi-exclamation-circle mt-0.5"></i>
-        <span><b>Username or password is incorrect.</b> After 5 failed attempts in 15 minutes the account locks for 15 minutes.</span>
+        <span>{{ errorMessage() }}</span>
+      </div>
+    }
+    @case ('unavailable') {
+      <div role="alert" class="flex gap-2.5 rounded-[14px] border border-line-2 bg-page p-3 text-[13px] leading-4.75 text-ink-2">
+        <i class="pi pi-wifi mt-0.5"></i>
+        <span>{{ errorMessage() }}</span>
       </div>
     }
     @case ('locked') {
       <div role="alert" class="flex gap-2.5 rounded-[14px] border border-warning/30 bg-warning-tint p-3 text-[13px] leading-4.75 text-warning">
         <i class="pi pi-lock mt-0.5"></i>
-        <span><b>Account locked for 15 minutes.</b> 5 failed attempts in 15 minutes.</span>
+        <span>{{ errorMessage() }}</span>
       </div>
     }
     @case ('expired') {
@@ -29,12 +35,11 @@
       <input id="username" formControlName="username" autocomplete="username"
              class="h-12 w-full rounded-control border bg-white ps-11 pe-3.5 text-sm outline-none transition
                     focus:border-brand focus:ring-4 focus:ring-brand/15"
-             [class.border-line-2]="!invalid('username') && error() !== 'invalid'"
-             [class.border-danger]="invalid('username') || error() === 'invalid'"
-             [class.!border-danger]="invalid('username') || error() === 'invalid'"
-             [class.!ring-4]="invalid('username') || error() === 'invalid'"
-             [class.!ring-danger/20]="invalid('username') || error() === 'invalid'"
-             [attr.aria-invalid]="invalid('username')" aria-describedby="username-err" />
+             [class.border-line-2]="!hasError('username')"
+             [class.!border-danger]="hasError('username')"
+             [class.!ring-4]="hasError('username')"
+             [class.!ring-danger/20]="hasError('username')"
+             [attr.aria-invalid]="hasError('username')" aria-describedby="username-err" />
     </div>
     @if (errorFor('username'); as msg) {
       <span id="username-err" class="flex items-center gap-1.5 text-xs text-danger">
@@ -52,12 +57,11 @@
              [type]="showPassword() ? 'text' : 'password'"
              class="h-12 w-full rounded-control border bg-white ps-11 pe-13 text-sm outline-none transition
                     focus:border-brand focus:ring-4 focus:ring-brand/15"
-             [class.border-line-2]="!invalid('password') && error() !== 'invalid'"
-             [class.border-danger]="invalid('password') || error() === 'invalid'"
-             [class.!border-danger]="invalid('password') || error() === 'invalid'"
-             [class.!ring-4]="invalid('password') || error() === 'invalid'"
-             [class.!ring-danger/20]="invalid('password') || error() === 'invalid'"
-             [attr.aria-invalid]="invalid('password')" aria-describedby="password-err" />
+             [class.border-line-2]="!hasError('password')"
+             [class.!border-danger]="hasError('password')"
+             [class.!ring-4]="hasError('password')"
+             [class.!ring-danger/20]="hasError('password')"
+             [attr.aria-invalid]="hasError('password')" aria-describedby="password-err" />
 
       <button type="button" (click)="showPassword.set(!showPassword())"
               [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
@@ -74,7 +78,7 @@
   </div>
 
 
-  <button type="submit" [disabled]="loading() || error() === 'locked'"
+  <button type="submit" [disabled]="loading() || error()?.type === 'locked'"
           class="mt-1.5 flex h-13 items-center justify-center gap-2 rounded-[14px] bg-brand text-[15px] font-bold text-white
                  shadow-card transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60">
     @if (loading()) {

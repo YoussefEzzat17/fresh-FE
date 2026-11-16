@@ -1,10 +1,10 @@
 import { computed, inject, Injectable, signal } from "@angular/core";
 import { HttpClient, HttpErrorResponse } from "@angular/common/http";
-import { Role, SignInError, SignInRequest, User } from "./auth.models";
+import { Role, SignInError, SignInRequest, User, SignInErrorResponse } from "./auth.models";
 import { Observable, catchError, from, map, switchMap, throwError } from 'rxjs';
 
-/** The server enforces the real lockout (5 tries / 15 min). Kept for the countdown UI. */
-export const LOCK_MS = 15 * 1_000;
+/** Lock policy: 5 wrong passwords in 15 minutes → locked for 15 minutes. The server enforces it; this drives the progress bar. */
+export const LOCK_MS = 15 * 60 * 1_000;
 
 /** localStorage keys, so a refresh or a new tab keeps the session and the lock. */
 const LOCK_KEY = 'dsp.signin.lock';
@@ -42,8 +42,11 @@ export class AuthService {
                 username,
                 password: passwordHash,
             })),
-            map(res => this.onLoggedIn(res)),
-            catchError((err: HttpErrorResponse) => throwError(() => this.toSignInError(err))),
+            map(res => {
+                this.clearLock();
+                return this.onLoggedIn(res);
+            }),
+            catchError((err: HttpErrorResponse) => throwError(() => this.toSignInError(err, username))),
         );
     }
 
@@ -156,13 +159,47 @@ export class AuthService {
         }
     }
 
-    /** 423 (or a lock code) means the account is locked; anything else is wrong credentials. */
-    private toSignInError(err: HttpErrorResponse): SignInError {
-        const code = err?.error?.code as string | undefined;
-        if (err?.status === 423 || code === 'ACCOUNT_LOCKED' || code === 'USER_LOCKED') {
-            return 'locked';
+    /** Maps the backend contract: 423 → lock screen, 401 → wrong credentials, anything else → server problem. */
+    private toSignInError(err: HttpErrorResponse, username: string): SignInError {
+        const body = (err.error ?? {}) as Partial<SignInErrorResponse>;
+
+        if (err.status === 423 || body.code === 'ACCOUNT_LOCKED' || body.code === 'USER_LOCKED') {
+            this.startLock(username, body);
+            return {
+                type: 'locked',
+                message: body.message ?? 'Your account is locked. Try again in 15 minutes.',
+            };
         }
-        return 'invalid';
+
+        if (err.status === 401 || body.code === 'INVALID_CREDENTIALS') {
+            return {
+                type: 'invalid',
+                message: body.message ?? 'Username or password is incorrect.',
+                attemptsLeft: body.attemptsLeft ?? null,
+            };
+        }
+
+        return {
+            type: 'unavailable',
+            message: err.status === 0
+                ? "We can't reach the server. Check your connection and try again."
+                : 'Something went wrong on our side. Please try again.',
+        };
+    }
+
+    /**
+     * Starts the lock screen countdown.
+     * retryAfterSeconds is relative, so a wrong PC clock can't break it; then retryAt; then the 15-minute policy.
+     */
+    private startLock(username: string, body: Partial<SignInErrorResponse>) {
+        const ms =
+            body.retryAfterSeconds != null ? body.retryAfterSeconds * 1000
+            : body.retryAt ? Math.max(0, Date.parse(body.retryAt) - Date.now())
+            : LOCK_MS;
+
+        const lock: AccountLock = { username, until: new Date(Date.now() + ms) };
+        this._lock.set(lock);
+        this.save(LOCK_KEY, { username, until: lock.until.toISOString() });
     }
 
     /** The saved lock stays until the user presses "Sign in" after the timer, even if it already ran out. */

@@ -1,4 +1,4 @@
-import { Component, inject, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { SignInError, SignInRequest } from '../../../../core/theme/auth/auth.models';
 type Field = 'username' | 'password';
@@ -37,6 +37,14 @@ export class SignInForm {
     return c.invalid && (c.dirty || c.touched);
   }
 
+  /** The message the server sent (401 / 423 / network), shown in the alert. */
+  errorMessage = computed(() => this.error()?.message ?? '');
+
+  /** Red border: the field is empty after touching it, or the server said the credentials are wrong. */
+  hasError(name: Field) {
+    return this.invalid(name) || this.error()?.type === 'invalid';
+  }
+
   submit() {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
@@ -44,4 +52,4 @@ export class SignInForm {
     }
     this.submitted.emit(this.form.getRawValue());
   }
-}
+}
