@@ -24,18 +24,25 @@
 
   <!-- Warnings -->
   <div class="mt-5 flex flex-col gap-3">
+    @if (categoriesError()) {
+      <ds-callout tone="danger" icon="pi pi-exclamation-circle" heading="Could not load the categories">
+        {{ categoriesError() }} Reload the page to try again.
+      </ds-callout>
+    }
     @if (incident(); as inc) {
       <ds-callout tone="danger" icon="pi pi-link" [heading]="'Links to ' + inc.id">
         This ticket joins the open incident and its Azure work item {{ inc.adoItem }}. No new escalation is raised.
       </ds-callout>
     }
-    @if (openTicket(); as t) {
-      <ds-callout tone="warning" icon="pi pi-clone" [heading]="'Already open: #' + t.id">
-        {{ t.title }} is still open for this customer. Use it instead of creating a duplicate.
-        <button dsCalloutActions type="button" [routerLink]="['/tickets', t.id]"
-                class="h-9 shrink-0 rounded-control border border-line-2 bg-white px-4 text-xs font-bold text-ink hover:bg-page">
-          Open #{{ t.id }}
-        </button>
+    @for (w of warnings(); track w.code) {
+      <ds-callout tone="warning" icon="pi pi-clone" [heading]="w.existingTicketNumber ? 'Already open: ' + w.existingTicketNumber : 'Check before creating'">
+        {{ w.message }} Use it instead of creating a duplicate.
+        @if (w.existingTicketNumber) {
+          <button dsCalloutActions type="button" [routerLink]="['/tickets', no(w.existingTicketNumber)]"
+                  class="h-9 shrink-0 rounded-control border border-line-2 bg-white px-4 text-xs font-bold text-ink hover:bg-page">
+            Open {{ w.existingTicketNumber }}
+          </button>
+        }
       </ds-callout>
     }
   </div>
@@ -46,7 +53,7 @@
       <div class="grid gap-5 md:grid-cols-2">
         <fieldset>
           <legend class="mb-2 text-[13px] font-bold text-ink">Platform</legend>
-          <div class="grid grid-cols-2 gap-1 rounded-xl bg-page p-1">
+          <div class="grid grid-cols-3 gap-1 rounded-xl bg-page p-1">
             @for (p of platforms; track p.id) {
               <label class="flex cursor-pointer items-center justify-center gap-2 rounded-[9px] py-2.5 text-xs font-bold uppercase text-ink-3
                             has-checked:bg-white has-checked:text-ink has-checked:shadow-bar
@@ -76,20 +83,40 @@
           <label for="category" class="text-[13px] font-bold text-ink">Category</label>
           <select id="category" formControlName="category"
                   class="h-12 rounded-control border border-line-2 bg-white px-3 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/15">
-            @for (name of categoryNames; track name) {
-              <option [value]="name">{{ name }}</option>
+            @for (p of parents(); track p.code) {
+              <option [value]="p.code">{{ p.name }}</option>
+            } @empty {
+              <option value="">{{ categoriesError() ? 'Could not load categories' : 'Loading…' }}</option>
             }
           </select>
         </div>
 
         <div class="flex flex-col gap-2">
           <label for="issue" class="text-[13px] font-bold text-ink">Issue</label>
-          <select id="issue" formControlName="issue"
+          <select id="issue" formControlName="categoryCode"
                   class="h-12 rounded-control border border-line-2 bg-white px-3 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/15">
-            @for (issue of issues(); track issue) {
-              <option [value]="issue">{{ issue }}</option>
+            @for (issue of issues(); track issue.code) {
+              <option [value]="issue.code">{{ issue.name }}</option>
             }
           </select>
+        </div>
+
+        <div class="flex flex-col gap-2 md:col-span-2">
+          <label for="reference" class="text-[13px] font-bold text-ink">
+            Transaction reference
+            <span class="font-normal text-ink-3">{{ issue()?.referenceRequired ? '(required for this issue)' : '(if the customer has one)' }}</span>
+          </label>
+          <input id="reference" type="text" formControlName="reference" maxlength="40"
+                 [placeholder]="issue()?.referenceHint ?? 'TRX-2026-01111'"
+                 class="h-12 rounded-control border bg-white px-3 font-mono text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
+                 [class.border-line-2]="!referenceInvalid()" [class.border-danger]="referenceInvalid()"
+                 [attr.aria-invalid]="referenceInvalid()" aria-describedby="reference-err" />
+          @if (referenceInvalid()) {
+            <span id="reference-err" class="flex items-center gap-1.5 text-xs text-danger">
+              <i class="pi pi-info-circle text-[11px]"></i>
+              {{ serverErrors()['reference'] || (form.controls.reference.hasError('required') ? 'This issue needs the transaction reference.' : 'Use the format TRX-YYYY-NNNNN.') }}
+            </span>
+          }
         </div>
 
         <div class="flex flex-col gap-2 md:col-span-2">
@@ -102,23 +129,40 @@
           @if (reportInvalid()) {
             <span id="report-err" class="flex items-center gap-1.5 text-xs text-danger">
               <i class="pi pi-info-circle text-[11px]"></i>
-              Write what the customer reports in at least 10 characters.
+              {{ serverErrors()['description'] || 'Write what the customer reports in at least 10 characters.' }}
             </span>
           }
         </div>
       </div>
 
+      @if (duplicate(); as msg) {
+        <div class="mt-5">
+          <ds-callout tone="warning" icon="pi pi-clone" heading="An open ticket already exists">
+            {{ msg }}
+            <button dsCalloutActions type="button" (click)="submit(true)" [disabled]="saving()"
+                    class="h-9 shrink-0 rounded-control border border-line-2 bg-white px-4 text-xs font-bold text-ink hover:bg-page">
+              Create anyway
+            </button>
+          </ds-callout>
+        </div>
+      }
+      @if (submitError()) {
+        <p class="mt-5 flex items-center gap-2 rounded-[12px] bg-danger-tint px-4 py-3 text-xs text-danger" role="alert">
+          <i class="pi pi-exclamation-circle"></i> {{ submitError() }}
+        </p>
+      }
+
       <div class="mt-5 flex flex-wrap items-center gap-3 border-t border-line-2 pt-4">
         <p class="flex-1 text-xs text-ink-3">
-          SLA {{ sla() }} hours. The latest error code and device are attached from the activity log.
+          SLA {{ sla() }} hours. The server attaches the customer's latest error code.
         </p>
         <button type="button" (click)="cancel()"
                 class="h-10 rounded-control border border-line-2 bg-white px-4 text-xs font-bold text-ink hover:bg-page">
           Cancel
         </button>
-        <button type="submit"
-                class="h-10 rounded-control bg-brand px-5 text-xs font-bold text-white hover:bg-brand-hover">
-          Create ticket
+        <button type="submit" [disabled]="saving()"
+                class="h-10 rounded-control bg-brand px-5 text-xs font-bold text-white hover:bg-brand-hover disabled:opacity-50">
+          {{ saving() ? 'Creating…' : 'Create ticket' }}
         </button>
       </div>
     </form>

@@ -116,6 +116,9 @@ const TABLET_QUERY = '(max-width: 1179px)';
               <span class="user-role">{{ u.role }}</span>
             </span>
           }
+          <button type="button" class="sign-out" aria-label="Sign out" title="Sign out" (click)="signOut.emit()">
+            <i class="pi pi-sign-out" aria-hidden="true"></i>
+          </button>
         </footer>
       }
     </nav>
@@ -133,6 +136,8 @@ export class DsSidebar {
   /** Compact (icons-only) rail; two-way bindable. Below 1180px it is forced on. */
   readonly collapsed = model(false);
   readonly itemSelect = output<DsSidebarItem>();
+  /** The sign-out button in the user card. */
+  readonly signOut = output<void>();
 
   protected readonly tablet = signal(false);
   protected readonly compact = computed(() => this.collapsed() || this.tablet());

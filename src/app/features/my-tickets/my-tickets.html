@@ -1,6 +1,6 @@
 <header class="mb-6">
   <h1 class="text-[28px] font-extrabold tracking-tight text-ink">My tickets</h1>
-  <p class="mt-1 text-sm text-ink-3">{{ tickets.mine().length }} tickets</p>
+  <p class="mt-1 text-sm text-ink-3">{{ total() }} tickets</p>
 </header>
 
 <section class="overflow-hidden rounded-[20px] bg-white shadow-card">
@@ -8,39 +8,43 @@
   <div class="flex flex-wrap items-center gap-3 p-5">
     <div class="flex flex-wrap gap-1.5 text-xs" role="group" aria-label="Status">
       @for (f of statusFilters; track f.id) {
-        <button type="button" (click)="status.set(f.id)" [attr.aria-pressed]="status() === f.id"
+        <button type="button" (click)="setStatus(f.id)" [attr.aria-pressed]="status() === f.id"
                 class="rounded-full border px-3 py-1.5 font-medium"
                 [class.border-brand]="status() === f.id" [class.bg-brand]="status() === f.id" [class.text-white]="status() === f.id"
                 [class.border-line-2]="status() !== f.id" [class.text-ink]="status() !== f.id">
           {{ f.label }}
         </button>
       }
-      @if (incident()) {
-        <button type="button" (click)="clearIncident()" aria-label="Remove incident filter"
-                class="flex items-center gap-1.5 rounded-full border border-danger/30 bg-danger-tint px-3 py-1.5 font-medium text-danger">
-          {{ incident() }} <i class="pi pi-times text-[10px]"></i>
-        </button>
-      }
     </div>
 
     <div class="relative ms-auto w-full sm:w-72">
-      <label for="tq" class="sr-only">Filter by ticket, CIF, ADO or customer</label>
+      <label for="tq" class="sr-only">Filter by ticket number or CIF</label>
       <i class="pi pi-search pointer-events-none absolute inset-s-3.5 top-1/2 -translate-y-1/2 text-xs text-ink-3"></i>
-      <input id="tq" type="search" placeholder="Ticket, CIF, ADO or customer"
+      <input id="tq" type="search" placeholder="Ticket # or CIF"
              [value]="query()" (input)="query.set($any($event.target).value)"
              class="h-11 w-full rounded-control border border-line-2 bg-white ps-10 pe-3 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/15" />
     </div>
   </div>
 
-  @if (rows().length === 0) {
-    <div class="flex flex-col items-center gap-2 border-t border-line-2 px-6 py-12 text-center">
-      <span class="grid size-12 place-items-center rounded-full bg-page text-ink-3"><i class="pi pi-ticket"></i></span>
-      <b class="text-ink">No tickets match.</b>
-      <span class="text-sm text-ink-3">Try another filter or search.</span>
+  @if (error()) {
+    <div class="flex flex-col items-center gap-2 border-t border-line-2 px-6 py-12 text-center" role="alert">
+      <span class="grid size-12 place-items-center rounded-full bg-danger-tint text-danger"><i class="pi pi-exclamation-circle"></i></span>
+      <b class="text-ink">Couldn't load your tickets.</b>
+      <span class="text-sm text-ink-3">{{ error() }}</span>
+    </div>
+  } @else if (rows().length === 0) {
+    <div class="flex flex-col items-center gap-2 border-t border-line-2 px-6 py-12 text-center" [attr.aria-busy]="loading()">
+      <span class="grid size-12 place-items-center rounded-full bg-page text-ink-3">
+        <i class="pi" [class.pi-ticket]="!loading()" [class.pi-spin]="loading()" [class.pi-spinner]="loading()"></i>
+      </span>
+      <b class="text-ink">{{ loading() ? 'Loading…' : 'No tickets match.' }}</b>
+      @if (!loading()) {
+        <span class="text-sm text-ink-3">Try another filter or search.</span>
+      }
     </div>
   } @else {
     <!-- Desktop: table -->
-    <div class="hidden overflow-x-auto md:block">
+    <div class="hidden overflow-x-auto md:block" [class.opacity-60]="loading()">
       <table class="w-full text-sm">
         <thead class="bg-page text-xs font-bold uppercase tracking-wide text-ink-3">
           <tr>
@@ -53,42 +57,31 @@
           </tr>
         </thead>
         <tbody>
-          @for (t of rows(); track t.id) {
-            @let sla = tickets.sla(t);
-            <tr class="border-t border-line-2 hover:bg-blue-50/40" [class.bg-danger-tint/40]="sla.state === 'breached'">
+          @for (t of rows(); track t.number) {
+            @let sla = slaState(t);
+            <tr class="border-t border-line-2 hover:bg-blue-50/40" [class.bg-danger-tint/40]="sla === 'breached'">
               <td class="px-5 py-4">
-                <a [routerLink]="['/tickets', t.id]" class="whitespace-nowrap font-bold text-ink hover:text-brand">#{{ t.id }} · {{ t.title }}</a>
+                <a [routerLink]="['/tickets', no(t.number)]" class="whitespace-nowrap font-bold text-ink hover:text-brand">{{ t.number }} · {{ t.title }}</a>
                 <div class="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                  @if (t.origin === 'monitor') {
-                    <span class="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-brand">Auto-created</span>
+                  @if (t.origin !== 'MANUAL') {
+                    <span class="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-brand">{{ originLabel[t.origin] }}</span>
                   }
-                  @if (t.errorCode) {
-                    <span class="rounded-[6px] bg-page px-1.5 py-0.5 font-mono text-[10px] text-ink-2">{{ t.errorCode }}</span>
-                  }
-                  @if (t.transactionRef) {
-                    <span class="font-mono text-[10px] text-ink-3">{{ t.transactionRef }}</span>
-                  }
+                  <span class="text-ink-3">{{ t.createdAt | date: 'd MMM, HH:mm' }}</span>
                 </div>
               </td>
               <td class="whitespace-nowrap px-5 py-4">
-                {{ customer(t)?.name }}
-                <div class="text-xs capitalize text-ink-3">{{ customer(t)?.segment }} · {{ t.platform }}</div>
+                {{ t.customerName }}
+                <div class="text-xs text-ink-3">{{ t.customerCif }}</div>
               </td>
-              <td class="px-5 py-4"><ds-priority [level]="t.priority" /></td>
+              <td class="px-5 py-4"><ds-priority [level]="priority(t.priority)" /></td>
               <td class="px-5 py-4">
-                <ds-status-pill [tone]="statusInfo[t.status].tone">
-                  {{ statusInfo[t.status].label }}@if (t.status === 'with-sre') { · {{ t.adoItem }} }
-                </ds-status-pill>
+                <ds-status-pill [tone]="statusInfo[t.status].tone">{{ statusInfo[t.status].label }}</ds-status-pill>
               </td>
               <td class="px-5 py-4">
-                @if (sla.state === 'paused' || tickets.isDone(t)) {
-                  <span class="text-xs text-ink-3">{{ tickets.isDone(t) ? (t.resolvedAt | date: 'd MMM') : sla.label }}</span>
-                } @else {
-                  <span class="whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold" [class]="slaClass(sla.state)">{{ sla.label }}</span>
-                }
+                <span class="whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold" [class]="slaClass(sla)">{{ slaLabel[t.slaState] }}</span>
               </td>
               <td class="whitespace-nowrap px-5 py-4 text-end">
-                <a [routerLink]="['/tickets', t.id]" class="text-xs font-bold text-brand hover:underline">{{ action(t) }} →</a>
+                <a [routerLink]="['/tickets', no(t.number)]" class="text-xs font-bold text-brand hover:underline">Open →</a>
               </td>
             </tr>
           }
@@ -97,19 +90,16 @@
     </div>
 
     <!-- Phone: cards -->
-    <ul class="divide-y divide-line-2 border-t border-line-2 md:hidden">
-      @for (t of rows(); track t.id) {
-        @let sla = tickets.sla(t);
+    <ul class="divide-y divide-line-2 border-t border-line-2 md:hidden" [class.opacity-60]="loading()">
+      @for (t of rows(); track t.number) {
         <li>
-          <a [routerLink]="['/tickets', t.id]" class="flex flex-col gap-2 p-4">
-            <b class="text-sm text-ink">#{{ t.id }} · {{ t.title }}</b>
-            <span class="text-xs text-ink-3">{{ customer(t)?.name }} · <span class="capitalize">{{ t.platform }}</span></span>
+          <a [routerLink]="['/tickets', no(t.number)]" class="flex flex-col gap-2 p-4">
+            <b class="text-sm text-ink">{{ t.number }} · {{ t.title }}</b>
+            <span class="text-xs text-ink-3">{{ t.customerName }} · {{ t.customerCif }}</span>
             <div class="flex flex-wrap items-center gap-2 text-xs">
-              <ds-priority [level]="t.priority" />
+              <ds-priority [level]="priority(t.priority)" />
               <ds-status-pill [tone]="statusInfo[t.status].tone">{{ statusInfo[t.status].label }}</ds-status-pill>
-              @if (sla.state !== 'paused' && !tickets.isDone(t)) {
-                <span class="rounded-full px-2.5 py-1 font-bold" [class]="slaClass(sla.state)">{{ sla.label }}</span>
-              }
+              <span class="rounded-full px-2.5 py-1 font-bold" [class]="slaClass(slaState(t))">{{ slaLabel[t.slaState] }}</span>
             </div>
           </a>
         </li>
@@ -117,14 +107,14 @@
     </ul>
   }
 
-  <!-- Pagination -->
+  <!-- Pagination (page() is zero-based) -->
   <div class="flex items-center justify-end gap-3 border-t border-line-2 px-5 py-3 text-xs">
-    <button type="button" (click)="page.set(page() - 1)" [disabled]="page() === 1"
+    <button type="button" (click)="page.set(page() - 1)" [disabled]="page() === 0 || loading()"
             class="h-9 rounded-control border border-line-2 px-3 font-bold text-ink hover:bg-page disabled:cursor-not-allowed disabled:opacity-40">
       Previous
     </button>
-    <span class="font-semibold text-ink">Page {{ page() }} of {{ pages() }}</span>
-    <button type="button" (click)="page.set(page() + 1)" [disabled]="page() === pages()"
+    <span class="font-semibold text-ink">Page {{ page() + 1 }} of {{ pages() }}</span>
+    <button type="button" (click)="page.set(page() + 1)" [disabled]="page() + 1 >= pages() || loading()"
             class="h-9 rounded-control border border-line-2 px-3 font-bold text-ink hover:bg-page disabled:cursor-not-allowed disabled:opacity-40">
       Next
     </button>

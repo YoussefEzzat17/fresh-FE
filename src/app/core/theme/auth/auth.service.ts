@@ -1,7 +1,7 @@
 import { computed, inject, Injectable, signal } from "@angular/core";
 import { HttpClient, HttpErrorResponse } from "@angular/common/http";
 import { Role, SignInError, SignInRequest, User, SignInErrorResponse } from "./auth.models";
-import { Observable, catchError, from, map, switchMap, throwError } from 'rxjs';
+import { Observable, catchError, finalize, from, map, of, switchMap, throwError } from 'rxjs';
 
 /** Lock policy: 5 wrong passwords in 15 minutes → locked for 15 minutes. The server enforces it; this drives the progress bar. */
 export const LOCK_MS = 15 * 60 * 1_000;
@@ -76,6 +76,14 @@ export class AuthService {
         }
     }
 
+    /** True when the stored access token has a user and has not expired yet. Reads the token only; the server still checks it. */
+    hasValidAccessToken(): boolean {
+        const token = this.accessToken();
+        const payload = token ? this.decodeJwt(token) : null;
+        if (!payload?.sub) return false;
+        return !payload.exp || payload.exp * 1000 > Date.now();
+    }
+
     /** The refresh token from the last login (null = none stored). */
     refreshToken(): string | null {
         try {
@@ -121,6 +129,21 @@ export class AuthService {
     clearLock() {
         this._lock.set(null);
         this.save(LOCK_KEY, null);
+    }
+
+    /**
+     * Ends the session on the server (every token stops working), then forgets it here.
+     * We sign out locally even if the call fails (offline, token already expired), so the button always works.
+     */
+    logout(): Observable<void> {
+        if (!this.accessToken()) {
+            this.signOut();
+            return of(undefined);
+        }
+        return this.http.post<void>('/api/auth/logout', {}).pipe(
+            catchError(() => of(undefined)),
+            finalize(() => this.signOut()),
+        );
     }
 
     signOut() {

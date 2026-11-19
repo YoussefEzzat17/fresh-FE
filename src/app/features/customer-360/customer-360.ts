@@ -1,10 +1,12 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
+import { catchError, of, switchMap } from 'rxjs';
 import { DsPriorityBadge, DsStatusPill, DsTone } from '../../shared/ui';
-import { CustomerService } from '../../core/theme/auth/customer.service';
-import { TICKET_STATUS, TicketService } from '../../core/theme/auth/ticket.service';
-import {
+import { CustomerService } from '../customer-search/customer.service';
+import { TICKET_STATUS, TicketService, isDone, ticketNo, toDsPriority } from '../my-tickets/ticket.service';
+import { CustomerTicketsResponse } from '../my-tickets/ticket.models';import {
   DigitalStatus,
   Platform,
   maskMobile,
@@ -36,7 +38,11 @@ export class Customer360 {
   customer = computed(() => this.service.getByCif(this.cif()));
   verified = computed(() => this.service.isVerified(this.cif()));
   verifiedAt = computed(() => this.service.verifiedTime(this.cif()));
-  tickets = computed(() => this.ticketService.forCustomer(this.cif()));
+  /** From GET /api/customers/{cif}/tickets. Empty if the server refuses (e.g. caller not verified there). */
+  private customerTickets = signal<CustomerTicketsResponse | null>(null);
+  tickets = computed(() => this.customerTickets()?.tickets ?? []);
+  repeatCaller = computed(() => this.customerTickets()?.repeatCaller ?? false);
+  repeatCallerNote = computed(() => this.customerTickets()?.repeatCallerNote ?? '');
   activity = computed(() => this.service.activityFor(this.cif()));
 
   // ---------- activity log filters ----------
@@ -80,15 +86,23 @@ export class Customer360 {
   });
 
   /** More than one ticket in the last 20 days. */
-  repeatCaller = computed(() => {
-    const from = Date.now() - 20 * 24 * 60 * 60_000;
-    return this.tickets().filter(t => t.createdAt.getTime() >= from).length > 1;
-  });
 
   statusTone: Record<DigitalStatus, DsTone> = { active: 'success', locked: 'danger', inactive: 'neutral' };
 
   ticketStatus = TICKET_STATUS;
+  isDone = isDone;
+  no = ticketNo;
+  priority = toDsPriority;
 
+  constructor() {
+    // A new CIF in the URL → load that customer's tickets.
+    toObservable(this.cif)
+      .pipe(
+        switchMap(cif => this.ticketService.forCustomer(cif).pipe(catchError(() => of(null)))),
+        takeUntilDestroyed(),
+      )
+      .subscribe(res => this.customerTickets.set(res));
+  }
   initials(name: string) {
     return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   }

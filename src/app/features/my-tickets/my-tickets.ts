@@ -1,11 +1,21 @@
-import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
+import { EMPTY, catchError, debounceTime, distinctUntilChanged, map, switchMap, tap } from 'rxjs';
 import { DsPriorityBadge, DsSlaState, DsStatusPill } from '../../shared/ui';
-import { TICKET_STATUS, TicketService } from '../../core/theme/auth/ticket.service';
-import { Ticket } from '../customer-search/customer.models';
+import {
+  ORIGIN_LABEL,
+  SLA_LABEL,
+  SLA_STATE,
+  TICKET_STATUS,
+  TicketService,
+  readApiError,
+  ticketNo,
+  toDsPriority,
+} from './ticket.service';
+import { PageResponse, TicketListRow, TicketView } from './ticket.models';
 
-type StatusFilter = 'all' | 'open' | 'done';
 const PAGE_SIZE = 8;
 
 @Component({
@@ -14,69 +24,76 @@ const PAGE_SIZE = 8;
   templateUrl: './my-tickets.html',
 })
 export class MyTickets {
-  protected tickets = inject(TicketService);
-  private router = inject(Router);
+  private api = inject(TicketService);
 
-  /** Optional ?incident=INC-301 from the Home banner (withComponentInputBinding). */
-  incident = input<string>();
-
-  status = signal<StatusFilter>('all');
+  status = signal<TicketView>('ALL');
+  /** What the agent types (every key). */
   query = signal('');
-  page = signal(1);
+  /** What we send: the query 300ms after the agent stops typing. */
+  private search = signal('');
+  /** Zero-based, like the API. The template shows page() + 1. */
+  page = signal(0);
 
-  statusFilters: { id: StatusFilter; label: string }[] = [
-    { id: 'all', label: 'All' },
-    { id: 'open', label: 'Open' },
-    { id: 'done', label: 'Resolved & closed' },
+  result = signal<PageResponse<TicketListRow> | null>(null);
+  loading = signal(true);
+  error = signal('');
+
+  statusFilters: { id: TicketView; label: string }[] = [
+    { id: 'ALL', label: 'All' },
+    { id: 'OPEN', label: 'Open' },
+    { id: 'RESOLVED_CLOSED', label: 'Resolved & closed' },
   ];
 
-  filtered = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    return this.tickets.mine().filter(t => {
-      const done = this.tickets.isDone(t);
-      if (this.status() === 'open' && done) return false;
-      if (this.status() === 'done' && !done) return false;
-      if (this.incident() && t.incidentId !== this.incident()) return false;
-      if (!q) return true;
-      const name = this.tickets.customerOf(t)?.name.toLowerCase() ?? '';
-      return (
-        t.id.includes(q.replace('#', '')) ||
-        t.cif.includes(q) ||
-        (t.adoItem ?? '').toLowerCase().includes(q) ||
-        name.includes(q)
-      );
-    });
-  });
-
-  pages = computed(() => Math.max(1, Math.ceil(this.filtered().length / PAGE_SIZE)));
-  rows = computed(() => this.filtered().slice((this.page() - 1) * PAGE_SIZE, this.page() * PAGE_SIZE));
-
-  statusInfo = TICKET_STATUS;
+  /** Everything the request depends on. A change to any of them → a new request. */
+  private params = computed(() => ({ view: this.status(), q: this.search(), page: this.page(), size: PAGE_SIZE }));
 
   constructor() {
-    // A new filter or search starts again from page 1.
-    effect(() => {
-      this.status();
-      this.query();
-      this.incident();
-      this.page.set(1);
-    });
+    // Typing → wait 300ms → a new search starts again from the first page.
+    toObservable(this.query)
+      .pipe(debounceTime(300), map(q => q.trim()), distinctUntilChanged(), takeUntilDestroyed())
+      .subscribe(q => {
+        this.search.set(q);
+        this.page.set(0);
+      });
+
+    // params change → ask the server. switchMap cancels a slower older request.
+    toObservable(this.params)
+      .pipe(
+        tap(() => this.loading.set(true)),
+        switchMap(p =>
+          this.api.list(p).pipe(
+            catchError(err => {
+              this.error.set(readApiError(err).message);
+              this.result.set(null);
+              this.loading.set(false);
+              return EMPTY;
+            }),
+          ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe(res => {
+        this.result.set(res);
+        this.error.set('');
+        this.loading.set(false);
+      });
   }
 
-  clearIncident() {
-    this.router.navigate(['/tickets']);
+  rows = computed(() => this.result()?.items ?? []);
+  total = computed(() => this.result()?.totalItems ?? 0);
+  pages = computed(() => Math.max(1, this.result()?.totalPages ?? 1));
+
+  setStatus(view: TicketView) {
+    this.status.set(view);
+    this.page.set(0); // a new filter starts again from the first page
   }
 
-  customer(t: Ticket) {
-    return this.tickets.customerOf(t);
-  }
-
-  action(t: Ticket): string {
-    if (t.status === 'new') return 'Start';
-    if (t.status === 'fixed') return 'Confirm fix';
-    if (t.status === 'with-sre' && this.tickets.sla(t).state === 'breached') return 'Ask SRE for update';
-    return 'Open';
-  }
+  statusInfo = TICKET_STATUS;
+  originLabel = ORIGIN_LABEL;
+  slaLabel = SLA_LABEL;
+  priority = toDsPriority;
+  no = ticketNo;
+  slaState = (t: TicketListRow): DsSlaState => SLA_STATE[t.slaState];
 
   slaClass(state: DsSlaState) {
     return {
