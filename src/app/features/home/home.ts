@@ -1,13 +1,32 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
+import { EMPTY, catchError, switchMap, tap, timer } from 'rxjs';
 import { DsPriorityBadge, DsSlaState } from '../../shared/ui';
 import { AuthService } from '../../core/theme/auth/auth.service';
-import { CustomerService } from '../../core/theme/auth/customer.service';
-import { TICKET_STATUS, TicketService } from '../../core/theme/auth/ticket.service';
-import { Ticket } from '../customer-search/customer.models';
+import { CustomerService } from '../customer-search/customer.service';
+import {
+  ORIGIN_LABEL,
+  SLA_STATE,
+  TICKET_STATUS,
+  TicketService,
+  readApiError,
+  ticketNo,
+  titleCase,
+  toDsPriority,
+} from '../my-tickets/ticket.service';
+import { QueueChip, QueueResponse, QueueTicket } from '../my-tickets/ticket.models';
 import { SERVICE_HEALTH } from '../customer-search/customers.mock';
 
-type QueueFilter = 'all' | 'risk' | 'confirm' | 'auto';
+/** Refresh the queue every minute so SLA labels stay fresh. */
+const REFRESH_MS = 60_000;
+
+const CHIPS: { id: QueueChip; label: string }[] = [
+  { id: 'ALL', label: 'All' },
+  { id: 'AT_RISK', label: 'At risk' },
+  { id: 'IN_REVIEW', label: 'Confirm fix' }, // the API calls this chip IN_REVIEW
+  { id: 'AUTO_CREATED', label: 'Auto-created' },
+];
 
 @Component({
   selector: 'app-home',
@@ -17,56 +36,57 @@ type QueueFilter = 'all' | 'risk' | 'confirm' | 'auto';
 export class Home {
   private auth = inject(AuthService);
   private customers = inject(CustomerService);
-  protected tickets = inject(TicketService);
+  private api = inject(TicketService);
 
   firstName = computed(() => this.auth.user()?.name.split(' ')[0] ?? '');
-  greeting = computed(() => {
-    const h = new Date(this.tickets.now()).getHours();
-    return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-  });
+  greeting = signal(greetingFor(new Date().getHours()));
 
-  // ---------- known issue banner ----------
+  // ---------- known issue banner (still mock: no incidents API yet) ----------
   incident = computed(() => this.customers.activeIncidents()[0]);
-  linkedCount = computed(() => {
-    const inc = this.incident();
-    return inc ? this.tickets.mine().filter(t => t.incidentId === inc.id && !this.tickets.isDone(t)).length : 0;
-  });
   showScript = signal(false);
 
-  // ---------- queue ----------
-  /** Open work, ordered by SLA risk, then by age. */
-  queue = computed(() =>
-    this.tickets
-      .mine()
-      .filter(t => !this.tickets.isDone(t))
-      .sort(
-        (a, b) =>
-          this.tickets.riskRank(a) - this.tickets.riskRank(b) || a.createdAt.getTime() - b.createdAt.getTime(),
-      ),
-  );
+  // ---------- queue (from the server) ----------
+  filter = signal<QueueChip>('ALL');
+  queue = signal<QueueResponse | null>(null);
+  loading = signal(true);
+  error = signal('');
 
-  filter = signal<QueueFilter>('all');
+  constructor() {
+    // A new chip → load it now, then again every minute.
+    // switchMap drops the old chip's timer when the agent picks another chip.
+    toObservable(this.filter)
+      .pipe(
+        tap(() => this.loading.set(true)),
+        switchMap(chip =>
+          timer(0, REFRESH_MS).pipe(
+            switchMap(() =>
+              this.api.queue(chip).pipe(
+                catchError(err => {
+                  this.error.set(readApiError(err).message);
+                  this.loading.set(false);
+                  return EMPTY;
+                }),
+              ),
+            ),
+          ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe(res => {
+        this.queue.set(res);
+        this.error.set('');
+        this.loading.set(false);
+      });
+  }
 
+  /** Chip counts come from the server and stay the same whichever chip is selected. */
   filters = computed(() => {
-    const q = this.queue();
-    return [
-      { id: 'all' as const, label: 'All', count: q.length },
-      { id: 'risk' as const, label: 'At risk', count: q.filter(t => this.atRisk(t)).length },
-      { id: 'confirm' as const, label: 'Confirm fix', count: q.filter(t => t.status === 'fixed').length },
-      { id: 'auto' as const, label: 'Auto-created', count: q.filter(t => t.origin === 'monitor').length },
-    ];
+    const counts = this.queue()?.counts;
+    return CHIPS.map(c => ({ ...c, count: counts?.[c.id] ?? 0 }));
   });
 
-  visible = computed(() => {
-    const q = this.queue();
-    switch (this.filter()) {
-      case 'risk': return q.filter(t => this.atRisk(t));
-      case 'confirm': return q.filter(t => t.status === 'fixed');
-      case 'auto': return q.filter(t => t.origin === 'monitor');
-      default: return q;
-    }
-  });
-
+  /** Already ordered by the server: confirm-fix first, paused last, highest SLA % in between. */
+  visible = computed(() => this.queue()?.tickets ?? []);
   shown = computed(() => this.visible().slice(0, 8));
 
   // ---------- side ----------
@@ -74,36 +94,28 @@ export class Home {
 
   attention = computed(() => {
     const items: { text: string; tone: 'bad' | 'info'; link: string }[] = [];
-    for (const t of this.queue()) {
-      if (this.tickets.sla(t).state === 'breached') items.push({ text: `SLA breached on #${t.id}`, tone: 'bad', link: `/tickets/${t.id}` });
+    for (const t of this.visible()) {
+      if (t.slaState === 'BREACHED') items.push({ text: `SLA breached on ${t.number}`, tone: 'bad', link: this.link(t) });
     }
-    for (const t of this.queue()) {
-      if (t.status === 'fixed') items.push({ text: `SRE fixed #${t.id} — confirm with the customer`, tone: 'info', link: `/tickets/${t.id}` });
-      else if (t.adoItem && !t.incidentId) items.push({ text: `Ticket #${t.id} is now ${t.adoItem} in Azure DevOps`, tone: 'info', link: `/tickets/${t.id}` });
+    for (const t of this.visible()) {
+      if (t.status === 'IN_REVIEW') items.push({ text: `SRE fixed ${t.number} — confirm the fix`, tone: 'info', link: this.link(t) });
     }
     const inc = this.incident();
-    if (inc) items.push({ text: `Known issue: ${inc.summary}. Tickets are grouped under ${inc.id}.`, tone: 'bad', link: '/tickets' });
+    if (inc) items.push({ text: `Known issue: ${inc.summary}.`, tone: 'bad', link: '/tickets' });
     return items;
   });
 
   status = TICKET_STATUS;
+  originLabel = ORIGIN_LABEL;
+  priority = toDsPriority;
+  slaState = (t: QueueTicket): DsSlaState => SLA_STATE[t.slaState];
 
-  atRisk(t: Ticket) {
-    const s = this.tickets.sla(t).state;
-    return s === 'breached' || s === 'at-risk';
+  link(t: QueueTicket) {
+    return `/tickets/${ticketNo(t.number)}`;
   }
 
-  customerLine(t: Ticket) {
-    const c = this.tickets.customerOf(t);
-    return [c?.name, c?.segment, t.platform === 'mobile' ? 'Mobile' : 'Web', t.transactionRef].filter(Boolean).join(' · ');
-  }
-
-  /** What the agent should do next on this ticket. */
-  action(t: Ticket): string {
-    if (t.status === 'new') return 'Start';
-    if (t.status === 'fixed') return 'Confirm fix';
-    if (t.status === 'with-sre' && this.tickets.sla(t).state === 'breached') return 'Ask SRE for update';
-    return 'Open';
+  customerLine(t: QueueTicket) {
+    return [t.customerName, titleCase(t.segment), titleCase(t.platform)].join(' · ');
   }
 
   slaClass(state: DsSlaState) {
@@ -115,11 +127,15 @@ export class Home {
     }[state];
   }
 
-  /** Icon tile colour: red for breached, purple while SRE owns it, blue otherwise. */
-  tileClass(t: Ticket) {
-    if (this.tickets.sla(t).state === 'breached') return 'bg-danger-tint text-danger';
-    if (t.status === 'with-sre') return 'bg-sre-tint text-sre';
-    if (t.status === 'fixed') return 'bg-warning-tint text-warning';
+  /** Icon tile colour: red for breached, purple while SRE owns it, amber to confirm, blue otherwise. */
+  tileClass(t: QueueTicket) {
+    if (t.slaState === 'BREACHED') return 'bg-danger-tint text-danger';
+    if (t.status === 'ESCALATED' || t.status === 'WITH_SRE') return 'bg-sre-tint text-sre';
+    if (t.status === 'IN_REVIEW') return 'bg-warning-tint text-warning';
     return 'bg-blue-50 text-brand';
   }
+}
+
+function greetingFor(hour: number) {
+  return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 }

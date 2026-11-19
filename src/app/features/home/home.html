@@ -13,7 +13,6 @@
       <div class="min-w-0 flex-1">
         <b class="text-ink">Known issue {{ inc.id }} — {{ inc.summary }}</b>
         <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-danger">
-          <span><b>{{ linkedCount() }}</b> of your tickets linked</span>
           <span>SRE state <b>{{ inc.sreState }}</b> on {{ inc.adoItem }}</span>
           <span>New calls for this error link automatically</span>
         </div>
@@ -23,10 +22,6 @@
                 class="h-10 rounded-control border border-line-2 bg-white px-4 text-xs font-bold text-ink hover:bg-page">
           What to tell customers
         </button>
-        <a routerLink="/tickets" [queryParams]="{ incident: inc.id }"
-           class="grid h-10 place-items-center rounded-control bg-brand px-4 text-xs font-bold text-white hover:bg-brand-hover">
-          View {{ linkedCount() }} linked tickets
-        </a>
       </div>
     </div>
     @if (showScript()) {
@@ -57,21 +52,27 @@
         }
       </div>
     </div>
-
-    <ul>
+    
+    @if (error()) {
+      <p class="mx-5 mb-3 flex items-center gap-2 rounded-[12px] bg-danger-tint px-4 py-3 text-xs text-danger" role="alert">
+        <i class="pi pi-exclamation-circle"></i> {{ error() }}
+      </p>
+    }
+    <ul [attr.aria-busy]="loading()">
       @for (t of shown(); track t.id) {
-        @let sla = tickets.sla(t);
+        @let sla = slaState(t);
+        @let sre = t.status === 'ESCALATED' || t.status === 'WITH_SRE';
         <li class="grid items-center gap-3 border-t border-line-2 px-5 py-4 md:grid-cols-[40px_1fr_200px_auto] md:gap-4">
           <span class="hidden size-10 place-items-center rounded-control md:grid" [class]="tileClass(t)">
-            <i class="pi" [class.pi-ticket]="t.status !== 'with-sre'" [class.pi-server]="t.status === 'with-sre'"></i>
+            <i class="pi" [class.pi-ticket]="!sre" [class.pi-server]="sre"></i>
           </span>
 
           <div class="min-w-0">
-            <b class="text-sm text-ink">#{{ t.id }} · {{ t.title }}</b>
+            <b class="text-sm text-ink">{{ t.number }} · {{ t.title }}</b>
             <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
-              <ds-priority [level]="t.priority" />
-              @if (t.origin === 'monitor') {
-                <span class="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-brand">Auto-created</span>
+              <ds-priority [level]="priority(t.priority)" />
+              @if (t.origin !== 'MANUAL') {
+                <span class="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-brand">{{ originLabel[t.origin] }}</span>
               }
               @if (t.errorCode) {
                 <span class="rounded-[6px] bg-page px-1.5 py-0.5 font-mono text-[10px] text-ink-2">{{ t.errorCode }}</span>
@@ -81,26 +82,23 @@
           </div>
 
           <div class="flex flex-col items-start gap-1 text-xs">
-            @if (sla.state !== 'paused') {
-              <span class="rounded-full px-2.5 py-1 font-bold" [class]="slaClass(sla.state)">{{ sla.label }}</span>
-            }
-            @if (t.status === 'with-sre') {
-              <b class="text-sre">With SRE · {{ t.adoItem }}</b>
+            <span class="rounded-full px-2.5 py-1 font-bold" [class]="slaClass(sla)">{{ t.slaLabel }}</span>
+            @if (sre) {
+              <b class="text-sre">{{ status[t.status].label }}</b>
             } @else {
               <span class="text-ink-3">{{ status[t.status].label }}</span>
             }
-            @if (t.incidentId) {
-              <span class="text-ink-3">Part of {{ t.incidentId }}</span>
-            }
           </div>
 
-          <a [routerLink]="['/tickets', t.id]"
+          <a [routerLink]="link(t)"
              class="justify-self-start text-xs font-bold text-brand hover:underline md:justify-self-end">
-            {{ action(t) }} →
+            {{ t.nextActionLabel }} →
           </a>
         </li>
       } @empty {
-        <li class="border-t border-line-2 px-5 py-10 text-center text-sm text-ink-3">Nothing here. Nice work.</li>
+        <li class="border-t border-line-2 px-5 py-10 text-center text-sm text-ink-3">
+          {{ loading() ? 'Loading your queue…' : 'Nothing here. Nice work.' }}
+        </li>
       }
     </ul>
 

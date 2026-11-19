@@ -54,6 +54,7 @@ const MAX_PHONE_ITEMS = 5;
         [activeId]="activeId()"
         [user]="user()"
         (itemSelect)="itemSelect.emit($event)"
+        (signOut)="signOutClick.emit()"
       />
     }
 
@@ -82,6 +83,8 @@ export class DsAppShell {
   readonly itemSelect = output<DsSidebarItem>();
   readonly notificationsClick = output<void>();
   readonly avatarClick = output<void>();
+  /** The sidebar's sign-out button (wide screens). On phones, handle `avatarClick`. */
+  readonly signOutClick = output<void>();
 
   protected readonly phone = signal(false);
   protected readonly navItems = computed(() => this.phoneItems() ?? this.items().slice(0, MAX_PHONE_ITEMS));

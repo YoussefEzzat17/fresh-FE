@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { CustomerService } from '../../core/theme/auth/customer.service';
+import { CustomerService } from './customer.service';
 import { Customer, DigitalStatus, maskMobile } from './customer.models';
 import { VerifyCallerDialog } from './components/verify-caller-dialog/verify-caller-dialog';
 
