@@ -38,7 +38,11 @@ export class Home {
   private customers = inject(CustomerService);
   private api = inject(TicketService);
 
-  firstName = computed(() => this.auth.user()?.name.split(' ')[0] ?? '');
+  /** "mona" → "Mona": the first name with a capital first letter. */
+  firstName = computed(() => {
+    const first = this.auth.user()?.name.split(' ')[0] ?? '';
+    return first.charAt(0).toUpperCase() + first.slice(1);
+  });
   greeting = signal(greetingFor(new Date().getHours()));
 
   // ---------- known issue banner (still mock: no incidents API yet) ----------
@@ -138,4 +142,4 @@ export class Home {
 
 function greetingFor(hour: number) {
   return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-}
+}

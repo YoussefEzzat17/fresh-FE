@@ -145,14 +145,43 @@ export interface TakeStepRequest {
     reason?: string;
 }
 
-/** GET /api/tickets/categories: a row with a parentCode is a sub-category a ticket can use. */
+/** GET /api/tickets/categories: top-level categories, each with its sub-categories inside. */
 export interface CategoryDto {
     code: string;
     name: string;
-    parentCode: string | null;
+    defaultPriority: ApiPriority;
+    /** Inactive ones (and their sub-categories) are hidden from agents. */
+    active: boolean;
+    /** Sorted by name. A ticket always uses one of these. */
+    subCategories: SubCategoryDto[];
+}
+
+/** A sub-category: what a ticket's categoryCode points at. */
+export interface SubCategoryDto {
+    code: string;
+    name: string;
+    parentCode: string;
     defaultPriority: ApiPriority;
     referenceRequired: boolean;
+    /** The server's pattern for the reference, e.g. ^TRX-\d{4}-\d{5}$; null when there is none. */
+    referencePattern: string | null;
+    /** How to write the reference; null when none is needed. */
     referenceHint: string | null;
+    defaultErrorCode: string | null;
+    active: boolean;
+}
+
+/** GET /api/tickets/categories/{code}/suggested-priority */
+export interface PrioritySuggestionDto {
+    categoryCode: string;
+    category: string;
+    suggestedPriority: ApiPriority;
+    categoryDefault: ApiPriority;
+    /** HISTORY = most recent tickets in this sub-category used another priority. */
+    basedOn: 'HISTORY' | 'CATEGORY_DEFAULT';
+    /** One sentence that explains the suggestion. */
+    reason: string;
+    slaTargetMinutes: number;
 }
   
 export interface HistoryItem {

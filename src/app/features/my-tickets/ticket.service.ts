@@ -16,6 +16,7 @@ import {
   PageResponse,
   PrecheckRequest,
   PrecheckResponse,
+  PrioritySuggestionDto,
   QueueChip,
   QueueResponse,
   SlaState,
@@ -197,9 +198,16 @@ export class TicketService {
       .pipe(tap(() => this.refreshOpenCount())); // resolving or archiving changes the open count
   }
 
-  /** Active categories for the create form. Sub-categories are the rows with a parentCode. */
+  /** Active categories for the create form, each with its sub-categories inside. */
   categories() {
     return this.http.get<CategoryDto[]>(`${this.base}/categories`);
+  }
+
+  /** The priority to pre-select for a sub-category: its default, or what recent tickets used (basedOn HISTORY). */
+  suggestedPriority(subCategoryCode: string) {
+    return this.http.get<PrioritySuggestionDto>(
+      `${this.base}/categories/${encodeURIComponent(subCategoryCode)}/suggested-priority`,
+    );
   }
 
   timeline(number: string) {

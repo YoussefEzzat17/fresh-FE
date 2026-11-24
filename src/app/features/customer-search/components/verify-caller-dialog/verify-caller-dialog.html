@@ -11,41 +11,37 @@
     </p>
 
     <div class="mt-4 rounded-[14px] border border-line-2 bg-blue-50/50 p-4">
-      <b class="text-xs text-brand">{{ customer().name }}</b>
+      <b class="text-xs text-brand">{{ customer().fullName }}</b>
       <p class="mt-2 text-xs text-ink-3">
-        CIF {{ customer().cif }} · {{ customer().segment }} · {{ checkedCount() }} of 3 checked
+        {{ customer().cif }} · {{ segment() }} · {{ checkedCount() }} of {{ checks.length }} checked (2 needed)
       </p>
     </div>
 
     <div class="mt-3 flex flex-col gap-2">
-      <label class="flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 text-xs text-ink"
-             [class.border-line-2]="!nameDob()" [class.border-brand/30]="nameDob()" [class.bg-blue-50]="nameDob()">
-        <input type="checkbox" class="size-4 accent-brand" [checked]="nameDob()" (change)="nameDob.set(!nameDob())" />
-        Full name and date of birth match
-      </label>
-
-      <label class="flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 text-xs text-ink"
-             [class.border-line-2]="!city()" [class.border-brand/30]="city()" [class.bg-blue-50]="city()">
-        <input type="checkbox" class="size-4 accent-brand" [checked]="city()" (change)="city.set(!city())" />
-        City of residence matches
-      </label>
-
-      <label class="flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 text-xs text-ink"
-             [class.border-line-2]="!otp()" [class.border-brand/30]="otp()" [class.bg-blue-50]="otp()">
-        <input type="checkbox" class="size-4 accent-brand" [checked]="otp()" (change)="otp.set(!otp())" />
-        One-time code sent to {{ maskedMobile() }} matched
-      </label>
+      @for (check of checks; track check.id) {
+        <label class="flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 text-xs text-ink"
+               [class.border-line-2]="!isChecked(check.id)" [class.border-brand/30]="isChecked(check.id)" [class.bg-blue-50]="isChecked(check.id)">
+          <input type="checkbox" class="size-4 accent-brand" [checked]="isChecked(check.id)" (change)="toggle(check.id)" />
+          {{ check.label }}
+        </label>
+      }
     </div>
 
+    @if (error()) {
+      <p class="mt-3 flex items-center gap-1.5 text-xs text-danger" role="alert">
+        <i class="pi pi-info-circle text-[11px]"></i> {{ error() }}
+      </p>
+    }
+
     <div class="mt-4 flex gap-2">
-      <button type="button" (click)="failed.emit(customer())"
-              class="h-10 rounded-control border border-line-2 bg-white px-4 text-xs font-bold text-ink hover:bg-page">
+      <button type="button" (click)="callerFailed()" [disabled]="busy()"
+              class="h-10 rounded-control border border-line-2 bg-white px-4 text-xs font-bold text-ink hover:bg-page disabled:opacity-50">
         Caller failed
       </button>
-      <button type="button" [disabled]="!canConfirm()" (click)="confirmed.emit(customer())"
+      <button type="button" [disabled]="!canConfirm()" (click)="confirm()"
               class="h-10 rounded-control bg-brand px-4 text-xs font-bold text-white hover:bg-brand-hover
                      disabled:cursor-not-allowed disabled:opacity-50">
-        Confirm identity
+        {{ busy() ? 'Checking…' : 'Confirm identity' }}
       </button>
     </div>
   </section>
