@@ -1,16 +1,46 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
+import { ValidatorFn } from '@angular/forms';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
-import { catchError, distinctUntilChanged, finalize, map, of, switchMap } from 'rxjs';
+import { EMPTY, catchError, distinctUntilChanged, filter, finalize, map, of, switchMap, tap } from 'rxjs';
 import { DsCallout, DsPriority, DsPriorityBadge, PRIORITY_META } from '../../shared/ui';
 import { CustomerService } from '../customer-search/customer.service';
 import { TicketService, readApiError, ticketNo, toApiPriority, toDsPriority } from '../my-tickets/ticket.service';
-import { ApiPlatform, CategoryDto, PrecheckWarning } from '../my-tickets/ticket.models';
-import { Platform } from '../customer-search/customer.models';
+import { ApiPlatform, CategoryDto, PrecheckWarning, PrioritySuggestionDto, SubCategoryDto } from '../my-tickets/ticket.models';
+import { CustomerDetail, Platform } from '../customer-search/customer.models';
 
-/** TRX-2026-01111 */
+/** TRX-2026-01111. Used when the sub-category doesn't send its own referencePattern. */
 const REFERENCE_PATTERN = /^TRX-\d{4}-\d{5}$/;
+
+/** The server's pattern as a RegExp; the default one if it is missing or not valid in JavaScript. */
+function referenceRegex(pattern: string | null): RegExp {
+  if (!pattern) return REFERENCE_PATTERN;
+  try {
+    return new RegExp(pattern);
+  } catch {
+    return REFERENCE_PATTERN;
+  }
+}
+
+/** Nested (subCategories) or the older flat list (rows with parentCode) → one tree of usable categories. */
+function toTree(list: CategoryDto[]): CategoryDto[] {
+  type Row = CategoryDto & { parentCode?: string | null };
+  const rows = list as Row[];
+  const isOn = (x: { active?: boolean }) => x.active !== false; // a missing "active" counts as active
+  const nested = rows.some(c => Array.isArray(c.subCategories));
+  const parents = rows.filter(c => !c.parentCode);
+  const tree: CategoryDto[] = nested
+    ? parents
+    : parents.map(p => ({
+        ...p,
+        subCategories: rows.filter(s => s.parentCode === p.code) as unknown as SubCategoryDto[],
+      }));
+  return tree
+    .filter(isOn)
+    .map(c => ({ ...c, subCategories: (c.subCategories ?? []).filter(isOn) }))
+    .filter(c => c.subCategories.length > 0);
+}
 
 @Component({
   selector: 'app-new-ticket',
@@ -25,18 +55,23 @@ export class NewTicket {
   /** From the URL /customer-search/:cif/new-ticket. */
   cif = input.required<string>();
 
-  customer = computed(() => this.service.getByCif(this.cif()));
-  verified = computed(() => this.service.isVerified(this.cif()));
+  // ---------- the customer (GET /api/customers/{cif}): needs a verified caller ----------
+  customer = signal<CustomerDetail | null>(null);
+  state = signal<'loading' | 'ready' | 'not-verified' | 'not-found' | 'error'>('loading');
+  loadError = signal('');
 
-  /** Latest failed event (mock logs). The server attaches the real error code itself. */
-  latestError = computed(() => this.service.activityFor(this.cif()).find(e => e.failed));
+  /** The top failure of the last 6 hours (GET /diagnosis). The server attaches the latest error code itself. */
+  latestErrorCode = signal<string | null>(null);
 
   // ---------- categories (GET /api/tickets/categories) ----------
-  /** Every active category: top-level rows (parentCode null) and their sub-categories. */
+  /** The "Category" select: active top-level categories, each with its sub-categories inside. */
   categories = signal<CategoryDto[]>([]);
   categoriesError = signal('');
-  /** The "Category" select. */
-  parents = computed(() => this.categories().filter(c => !c.parentCode));
+  /** True once the list arrived, so an empty list says so instead of "Loading…". */
+  categoriesLoaded = signal(false);
+
+  // ---------- priority suggestion (GET .../suggested-priority) ----------
+  suggestion = signal<PrioritySuggestionDto | null>(null);
   priorities: DsPriority[] = ['critical', 'high', 'medium', 'low'];
   platforms: { id: ApiPlatform; label: string; icon: string }[] = [
     { id: 'MOBILE', label: 'Mobile', icon: 'pi pi-mobile' },
@@ -60,11 +95,13 @@ export class NewTicket {
     initialValue: this.form.getRawValue(),
   });
 
-  /** The "Issue" select: the sub-categories of the chosen category. */
-  issues = computed(() => this.categories().filter(c => c.parentCode === this.value().category));
-  /** The chosen sub-category, for referenceRequired and referenceHint. */
-  issue = computed(() => this.categories().find(c => c.code === this.value().categoryCode));
-  private parentName = computed(() => this.parents().find(p => p.code === this.value().category)?.name ?? '');
+  /** The chosen top-level category. */
+  private parent = computed(() => this.categories().find(c => c.code === this.value().category));
+  /** The "Issue" select: the active sub-categories of the chosen category (toTree already dropped the others). */
+  issues = computed(() => this.parent()?.subCategories ?? []);
+  /** The chosen sub-category, for referenceRequired, referenceHint and referencePattern. */
+  issue = computed(() => this.issues().find(s => s.code === this.value().categoryCode));
+  private parentName = computed(() => this.parent()?.name ?? '');
   sla = computed(() => PRIORITY_META[this.value().priority].slaHours);
   incident = computed(() =>
     this.service.incidentFor(this.parentName(), this.value().platform.toLowerCase() as Platform),
@@ -86,11 +123,39 @@ export class NewTicket {
   no = ticketNo;
 
   constructor() {
-    // Load the categories, then select the first category (which selects its first issue below).
+    // The customer first: the server only shows them to a verified caller.
+    toObservable(this.cif)
+      .pipe(
+        tap(() => this.state.set('loading')),
+        switchMap(cif =>
+          this.service.get(cif).pipe(
+            catchError(err => {
+              const e = readApiError(err);
+              this.state.set(
+                e.code === 'CALLER_NOT_VERIFIED' ? 'not-verified' : e.status === 404 ? 'not-found' : 'error',
+              );
+              this.loadError.set(e.message);
+              return EMPTY;
+            }),
+          ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe(c => {
+        this.customer.set(c);
+        this.state.set('ready');
+        this.service
+          .diagnosis(c.cif)
+          .pipe(catchError(() => of(null)))
+          .subscribe(d => this.latestErrorCode.set(d?.topFailure?.errorCode ?? null));
+      });
+
+    // Load the categories, then select the first one (which selects its first issue below).
     this.api.categories().subscribe({
       next: list => {
-        this.categories.set(list);
-        this.form.controls.category.setValue(this.parents()[0]?.code ?? '');
+        this.categories.set(toTree(list));
+        this.categoriesLoaded.set(true);
+        this.form.controls.category.setValue(this.categories()[0]?.code ?? '');
       },
       error: err => this.categoriesError.set(readApiError(err).message),
     });
@@ -99,24 +164,29 @@ export class NewTicket {
     this.form.controls.category.valueChanges
       .pipe(takeUntilDestroyed())
       .subscribe(code => {
-        const first = this.categories().find(c => c.parentCode === code);
+        const parent = this.categories().find(c => c.code === code);
+        const first = parent?.subCategories[0];
         this.form.controls.categoryCode.setValue(first?.code ?? '');
       });
 
-    // A new issue → start from its default priority, and ask for a reference only when it needs one.
+    // A new issue → its default priority now, the reference rules, then the server's suggestion.
     this.form.controls.categoryCode.valueChanges
-      .pipe(takeUntilDestroyed())
-      .subscribe(code => {
-        const issue = this.categories().find(c => c.code === code);
-        if (!issue) return;
-        this.form.controls.priority.setValue(toDsPriority(issue.defaultPriority));
-        const reference = this.form.controls.reference;
-        reference.setValidators(
-          issue.referenceRequired
-            ? [Validators.required, Validators.pattern(REFERENCE_PATTERN)]
-            : [Validators.pattern(REFERENCE_PATTERN)],
-        );
-        reference.updateValueAndValidity();
+      .pipe(
+        map(code => this.findIssue(code)),
+        tap(issue => {
+          this.suggestion.set(null);
+          if (!issue) return;
+          this.form.controls.priority.setValue(toDsPriority(issue.defaultPriority));
+          this.setReferenceRules(issue);
+        }),
+        filter((issue): issue is SubCategoryDto => !!issue),
+        switchMap(issue => this.api.suggestedPriority(issue.code).pipe(catchError(() => of(null)))),
+        takeUntilDestroyed(),
+      )
+      .subscribe(s => {
+        if (!s) return;
+        this.suggestion.set(s);
+        this.form.controls.priority.setValue(toDsPriority(s.suggestedPriority));
       });
 
     // Customer or issue changed → ask the server for duplicate warnings.
@@ -140,6 +210,23 @@ export class NewTicket {
       if (Object.keys(this.serverErrors()).length) this.serverErrors.set({});
       this.duplicate.set(null);
     });
+  }
+
+  private findIssue(code: string): SubCategoryDto | undefined {
+    for (const c of this.categories()) {
+      const found = c.subCategories.find(s => s.code === code);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  /** Required only when the sub-category says so; the format comes from its referencePattern. */
+  private setReferenceRules(issue: SubCategoryDto) {
+    const rules: ValidatorFn[] = [Validators.pattern(referenceRegex(issue.referencePattern))];
+    if (issue.referenceRequired) rules.unshift(Validators.required);
+    const reference = this.form.controls.reference;
+    reference.setValidators(rules);
+    reference.updateValueAndValidity();
   }
 
   reportInvalid() {
@@ -206,4 +293,4 @@ export class NewTicket {
     // CALLER_NOT_VERIFIED, CUSTOMER_NOT_FOUND, CATEGORY_*, network, 5xx …
     this.submitError.set(e.message);
   }
-}
+}

@@ -1,12 +1,18 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { EMPTY, catchError, filter, switchMap, tap } from 'rxjs';
 import { CustomerService } from './customer.service';
-import { Customer, DigitalStatus, maskMobile } from './customer.models';
+import { CustomerSearchResult, EnrollmentStatus } from './customer.models';
 import { VerifyCallerDialog } from './components/verify-caller-dialog/verify-caller-dialog';
+import { readApiError, titleCase } from '../my-tickets/ticket.service';
 
-/** Only digits (CIF) OR only letters and spaces (name), never mixed. */
-const SEARCH_PATTERN = /^(\d+|[A-Za-z؀-ۿ\s]+)$/;
+/**
+ * What the API can search by: CIF (100245 or CIF-100245), national ID, mobile (01…, 20…, +20…)
+ * or ticket number (#2001). Spaces are ignored. Names are not searchable.
+ */
+const SEARCH_PATTERN = /^(CIF-|#|\+)?\d+$/i;
 
 @Component({
   selector: 'app-customer-search',
@@ -24,51 +30,76 @@ export class CustomerSearch {
   query = signal(this.service.lastQuery());
 
   invalidQuery = computed(() => !!this.query() && !SEARCH_PATTERN.test(this.query()));
-  results = computed(() => (this.invalidQuery() ? [] : this.service.search(this.query())));
+
+  // ---------- results (GET /api/customers/search) ----------
+  results = signal<CustomerSearchResult[]>([]);
+  /** The server's "No match…" text when nothing matched. */
+  noMatchMessage = signal('');
+  loading = signal(false);
+  error = signal('');
 
   /** Customer the verify popup is open for. */
-  verifying = signal<Customer | null>(null);
+  verifying = signal<CustomerSearchResult | null>(null);
 
-  examples = [
-    { cif: '123456', name: 'Ahmed Ali' },
-    { cif: '889900', name: 'Mai Adel' },
-    { cif: '445566', name: 'Laila Mostafa' },
-  ];
-
-  statusStyle: Record<DigitalStatus, string> = {
-    active: 'bg-success-tint text-success',
-    locked: 'bg-danger-tint text-danger',
-    inactive: 'bg-page text-ink-3',
+  enrollment: Record<EnrollmentStatus, { label: string; style: string }> = {
+    ENROLLED: { label: 'Digital banking active', style: 'bg-success-tint text-success' },
+    SUSPENDED: { label: 'Digital banking suspended', style: 'bg-danger-tint text-danger' },
+    NOT_ENROLLED: { label: 'Not enrolled', style: 'bg-page text-ink-3' },
   };
+  titleCase = titleCase;
 
-  mask = maskMobile;
+  constructor() {
+    // Every new valid query → ask the server. switchMap drops a slower older search.
+    toObservable(this.query)
+      .pipe(
+        filter(q => !!q && SEARCH_PATTERN.test(q)),
+        tap(() => {
+          this.loading.set(true);
+          this.error.set('');
+        }),
+        switchMap(q =>
+          this.service.search(q).pipe(
+            catchError(err => {
+              // e.g. 429 TOO_MANY_SEARCHES: "More than 30 searches in 10 minutes"
+              this.error.set(readApiError(err).message);
+              this.results.set([]);
+              this.loading.set(false);
+              return EMPTY;
+            }),
+          ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe(res => {
+        this.results.set(res.results);
+        this.noMatchMessage.set(res.message ?? '');
+        this.loading.set(false);
+        // After a reload we don't know who is verified: ask the server for each match.
+        for (const c of res.results) this.service.checkVerification(c.cif).subscribe({ error: () => {} });
+      });
+  }
 
   onSearch() {
-    const q = this.search.value.trim();
+    const q = this.search.value.replace(/\s+/g, '');
     this.query.set(q);
     this.service.lastQuery.set(q);
   }
 
-  useExample(cif: string) {
-    this.search.setValue(cif);
-    this.onSearch();
-  }
-
-  /** Verification lives in the service, so Customer 360 and New ticket know about it too. */
-  isVerified(c: Customer) {
+  isVerified(c: CustomerSearchResult) {
     return this.service.isVerified(c.cif);
   }
 
-  onConfirmed(c: Customer) {
-    this.service.markVerified(c.cif);
+  /** The dialog already told the server; just close it and open the customer. */
+  onConfirmed(c: CustomerSearchResult) {
     this.verifying.set(null);
+    this.open360(c);
   }
 
   onFailed() {
     this.verifying.set(null);
   }
 
-  open360(c: Customer) {
+  open360(c: CustomerSearchResult) {
     this.router.navigate(['/customer-search', c.cif]);
   }
 }

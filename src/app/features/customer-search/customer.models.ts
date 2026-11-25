@@ -1,21 +1,110 @@
 import type { DsPriority } from '../../shared/ui';
+import type { ApiPlatform } from '../my-tickets/ticket.models';
 
-export type DigitalStatus = 'active' | 'locked' | 'inactive';
-export type Segment = 'Premier' | 'Retail' | 'Business';
-export type Platform = 'mobile' | 'web';
+// =====================================================================
+// Customers API (Swagger: /api/customers/...). Mirrors the server exactly.
+// =====================================================================
 
-export interface Customer {
+export type CustomerSegment = 'RETAIL' | 'PREMIUM' | 'VIP' | 'BUSINESS';
+/** Whether the customer uses digital banking. SUSPENDED = enrolled, but access is blocked. */
+export type EnrollmentStatus = 'ENROLLED' | 'NOT_ENROLLED' | 'SUSPENDED';
+/** An identity check the agent asks the caller. At least two must pass. */
+export type VerificationCheck = 'DATE_OF_BIRTH' | 'NATIONAL_ID_LAST4' | 'MOBILE_ON_FILE' | 'RECENT_TRANSACTION';
+/** A field that stays masked after verification; revealed one at a time, and audited. */
+export type SensitiveField = 'NATIONAL_ID' | 'MOBILE';
+export type ActivityRange = 'LAST_6_HOURS' | 'TODAY' | 'LAST_7_DAYS' | 'CUSTOM';
+
+/** GET /api/customers/search?q= : one row. National ID and mobile come masked. */
+export interface CustomerSearchResult {
   cif: string;
-  name: string;
-  segment: Segment;
-  city: string;
-  mobile: string;
-  nationalId: string;
-  device: string;
-  mobileBanking: DigitalStatus;
-  webBanking: DigitalStatus;
-  openTickets: number;
+  fullName: string;
+  segment: CustomerSegment;
+  maskedMobile: string;
+  enrollmentStatus: EnrollmentStatus;
+  openTicketCount: number;
+  /** Which identifier matched: CIF, NATIONAL_ID, MOBILE or TICKET. */
+  matchedBy: string;
 }
+
+export interface CustomerSearchResponse {
+  results: CustomerSearchResult[];
+  /** Set only when nothing matched, e.g. "No match. Check the digits and the ID type." */
+  message?: string;
+}
+
+/** GET /api/customers/{cif} : the Customer 360 header. Needs a verified caller (else 403 CALLER_NOT_VERIFIED). */
+export interface CustomerDetail {
+  cif: string;
+  fullName: string;
+  segment: CustomerSegment;
+  maskedNationalId: string;
+  maskedMobile: string;
+  enrollmentStatus: EnrollmentStatus;
+  preferredLanguage: string;
+  /** When this agent verified the caller. */
+  verifiedAt: string;
+}
+
+/** POST /verify and GET /verification. Verification lasts 30 minutes or until end-call. */
+export interface VerificationStatus {
+  cif: string;
+  verified: boolean;
+  passedChecks: VerificationCheck[];
+  verifiedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface RevealedField {
+  field: SensitiveField;
+  value: string;
+}
+
+/** GET /api/customers/{cif}/activity : one event. */
+export interface CustomerActivityEvent {
+  time: string;
+  eventType: string;
+  platform: ApiPlatform;
+  service: string;
+  result: 'SUCCESS' | 'FAILURE';
+  errorCode?: string;
+  /** True for failures, which the screen marks red. */
+  failure: boolean;
+}
+
+export interface CustomerActivityResponse {
+  range: ActivityRange;
+  from: string;
+  to: string;
+  failuresOnly: boolean;
+  /** For the time range and result filter, before the platform and service chips. */
+  counts: { total: number; failures: number; byPlatform: Record<string, number>; byService: Record<string, number> };
+  /** Newest first. */
+  events: CustomerActivityEvent[];
+  /** Set only when no event matches. */
+  emptyMessage?: string;
+}
+
+export interface CustomerActivityQuery {
+  range: ActivityRange;
+  failuresOnly: boolean;
+  /** Omit for every platform. */
+  platform?: ApiPlatform;
+}
+
+/** GET /api/customers/{cif}/diagnosis : what the logs already say (last 6 hours). */
+export interface CustomerDiagnosis {
+  windowHours: number;
+  hasFailures: boolean;
+  topFailure: { count: number; eventType: string; errorCode: string; service: string; firstAt: string; lastAt: string } | null;
+  summary: string;
+  servicesWithoutFailures: string[];
+}
+
+// =====================================================================
+// Still mock (no API yet): incidents banner, service health, old ticket types.
+// =====================================================================
+
+export type Platform = 'mobile' | 'web';
 
 /**
  * new      → created, nobody worked it yet
@@ -103,14 +192,4 @@ export interface NewTicketDraft {
   category: string;
   issue: string;
   report: string;
-}
-
-/** 01022233344 → 010••••3344 */
-export function maskMobile(mobile: string): string {
-  return `${mobile.slice(0, 3)}••••${mobile.slice(-4)}`;
-}
-
-/** 29001011234567 → ••••••••••4567 */
-export function maskNationalId(id: string): string {
-  return `${'•'.repeat(id.length - 4)}${id.slice(-4)}`;
 }

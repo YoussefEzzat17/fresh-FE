@@ -1,6 +1,6 @@
 <header class="mb-6 ">
   <h1 class="text-[28px] font-extrabold tracking-tight text-ink">Customer search</h1>
-  <p class="mt-2 text-sm text-ink-3">Search by CIF or client name. Every search is audited.</p>
+  <p class="mt-2 text-sm text-ink-3">Search by CIF, national ID, mobile or ticket number. Every search is audited.</p>
 </header>
 
 <!-- Search card -->
@@ -8,7 +8,7 @@
   <form (submit)="$event.preventDefault(); onSearch()" class="flex flex-col gap-3">
     <label for="q" class="text-[13px] font-bold text-ink">Search</label>
     <input id="q" type="search" [formControl]="search" autocomplete="off"
-           placeholder="e.g. 123456 or Ahmed Ali"
+           placeholder="e.g. 100245, CIF-100245, 01012345678 or #2001"
            class="h-12 w-full rounded-control border bg-white px-4 text-sm outline-none transition
                   focus:border-brand focus:ring-4 focus:ring-brand/15"
            [class.border-line-2]="!invalidQuery()"
@@ -19,13 +19,13 @@
     @if (invalidQuery()) {
       <p id="q-hint" class="flex items-center gap-1.5 text-xs text-danger">
         <i class="pi pi-info-circle text-[11px]"></i>
-        Search with the CIF (numbers only) or the client name (letters only).
+        Use digits only: a CIF (100245 or CIF-100245), national ID, mobile (01…, +20…) or ticket number (#2001).
       </p>
     }
 
-    <button type="submit"
-            class="h-11 w-fit rounded-control bg-brand px-8 text-sm font-bold text-white hover:bg-brand-hover">
-      Search
+    <button type="submit" [disabled]="loading()"
+            class="h-11 w-fit rounded-control bg-brand px-8 text-sm font-bold text-white hover:bg-brand-hover disabled:opacity-50">
+      {{ loading() ? 'Searching…' : 'Search' }}
     </button>
   </form>
 
@@ -36,55 +36,74 @@
 
 <!-- Results -->
 @if (query() && !invalidQuery()) {
-  <section class="mt-6 rounded-[20px] bg-white px-6 pb-2 pt-5 shadow-card">
+  <section class="mt-6 rounded-[20px] bg-white px-6 pb-2 pt-5 shadow-card" [attr.aria-busy]="loading()">
     <h2 class="text-[15px] font-bold text-ink">Results</h2>
     <p class="mt-1 text-xs text-ink-3" aria-live="polite">
-      {{ results().length }} {{ results().length === 1 ? 'customer matches' : 'customers match' }}
+      @if (loading()) {
+        Searching…
+      } @else if (!error()) {
+        {{ results().length }} {{ results().length === 1 ? 'customer matches' : 'customers match' }}
+      }
     </p>
 
-    @if (results().length === 0) {
+    @if (error()) {
+      <div class="flex flex-col items-center gap-2 py-10 text-center" role="alert">
+        <span class="grid size-12 place-items-center rounded-full bg-danger-tint text-danger"><i class="pi pi-exclamation-circle"></i></span>
+        <b class="text-ink">The search didn't work.</b>
+        <span class="text-sm text-ink-3">{{ error() }}</span>
+      </div>
+    } @else if (loading()) {
+      <div class="flex flex-col items-center gap-2 py-10 text-center">
+        <span class="grid size-12 place-items-center rounded-full bg-page text-ink-3"><i class="pi pi-spin pi-spinner" aria-hidden="true"></i></span>
+        <b class="text-sm text-ink">Searching…</b>
+      </div>
+    } @else if (results().length === 0) {
       <div class="flex flex-col items-center gap-2 py-10 text-center">
         <span class="grid size-12 place-items-center rounded-full bg-page text-ink-3"><i class="pi pi-search"></i></span>
         <b class="text-ink">No customer matches “{{ query() }}”.</b>
-        <span class="text-sm text-ink-3">Check the CIF or the spelling of the name.</span>
+        <span class="text-sm text-ink-3">{{ noMatchMessage() || 'Check the digits and the ID type.' }}</span>
       </div>
     }
 
-    <ul class="mt-3">
-      @for (c of results(); track c.cif) {
-        <li class="grid items-center gap-3 border-t border-line-2 py-4
-                   md:grid-cols-[1.3fr_1fr_auto_auto] md:gap-6">
-          <div>
-            <b class="text-sm text-ink">{{ c.name }}</b>
-            <div class="text-xs text-ink">{{ c.segment }} · CIF {{ c.cif }}</div>
-          </div>
+    @if (!loading() && !error()) {
+      <ul class="mt-3">
+        @for (c of results(); track c.cif) {
+          <li class="grid items-center gap-3 border-t border-line-2 py-4
+                     md:grid-cols-[1.3fr_1fr_auto_auto] md:gap-6">
+            <div>
+              <b class="text-sm text-ink">{{ c.fullName }}</b>
+              <div class="text-xs text-ink">{{ titleCase(c.segment) }} · {{ c.cif }}</div>
+            </div>
 
-          <span class="font-mono text-xs text-ink-3">
-            {{ isVerified(c) ? mask(c.mobile) : '•••••••••••' }}
-          </span>
+            <span class="font-mono text-xs text-ink-3">{{ c.maskedMobile }}</span>
 
-          <div class="flex flex-wrap items-center gap-1.5 text-xs">
-            <span class="rounded-full px-2.5 py-1 font-medium" [class]="statusStyle[c.mobileBanking]">Mobile {{ c.mobileBanking }}</span>
-            <span class="rounded-full px-2.5 py-1 font-medium" [class]="statusStyle[c.webBanking]">Web {{ c.webBanking }}</span>
-            <span class="rounded-full bg-page px-2.5 py-1 text-ink-3">{{ c.openTickets }} open</span>
-          </div>
+            <div class="flex flex-wrap items-center gap-1.5 text-xs">
+              <span class="rounded-full px-2.5 py-1 font-medium" [class]="enrollment[c.enrollmentStatus].style">
+                {{ enrollment[c.enrollmentStatus].label }}
+              </span>
+              <span class="rounded-full bg-page px-2.5 py-1 text-ink-3">{{ c.openTicketCount }} open</span>
+              @if (c.matchedBy !== 'CIF') {
+                <span class="rounded-full bg-blue-50 px-2.5 py-1 text-brand">Matched by {{ titleCase(c.matchedBy) }}</span>
+              }
+            </div>
 
-          <div class="md:text-end">
-            @if (isVerified(c)) {
-              <button type="button" (click)="open360(c)"
-                      class="h-10 rounded-control border border-line-2 bg-white px-6 text-xs font-bold text-ink hover:border-brand hover:text-brand">
-                Open 360
-              </button>
-            } @else {
-              <button type="button" (click)="verifying.set(c)"
-                      class="h-10 rounded-control bg-brand px-6 text-xs font-bold text-white hover:bg-brand-hover">
-                Verify caller
-              </button>
-            }
-          </div>
-        </li>
-      }
-    </ul>
+            <div class="md:text-end">
+              @if (isVerified(c)) {
+                <button type="button" (click)="open360(c)"
+                        class="h-10 rounded-control border border-line-2 bg-white px-6 text-xs font-bold text-ink hover:border-brand hover:text-brand">
+                  Open 360
+                </button>
+              } @else {
+                <button type="button" (click)="verifying.set(c)"
+                        class="h-10 rounded-control bg-brand px-6 text-xs font-bold text-white hover:bg-brand-hover">
+                  Verify caller
+                </button>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    }
   </section>
 }
 

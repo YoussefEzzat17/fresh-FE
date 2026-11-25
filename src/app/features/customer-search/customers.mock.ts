@@ -1,23 +1,10 @@
-import { ActivityEvent, Customer, Incident, ServiceHealth, Ticket } from './customer.models';
+import { ActivityEvent, Incident, ServiceHealth, Ticket } from './customer.models';
 
-// TODO: remove this file when the customers, tickets and logs APIs are ready.
+// TODO: remove this file when the incidents and service-health screens use their APIs.
+// Customers now come from /api/customers (CustomerService).
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000);
 const daysAgo = (d: number) => minutesAgo(d * 24 * 60);
-
-export const CUSTOMERS: Customer[] = [
-  { cif: '123456', name: 'Ahmed Ali',     segment: 'Premier',  city: 'Cairo',      mobile: '01012345678', nationalId: '29001011234567', device: 'iPhone 14 · iOS 18.2 · App 6.4.1',     mobileBanking: 'active',   webBanking: 'active',   openTickets: 1 },
-  { cif: '445566', name: 'Laila Mostafa', segment: 'Retail',   city: 'Mansoura',   mobile: '01022233344', nationalId: '29505121203344', device: 'Samsung S23 · Android 14 · App 6.4.0', mobileBanking: 'active',   webBanking: 'active',   openTickets: 1 },
-  { cif: '889900', name: 'Mai Adel',      segment: 'Business', city: 'Cairo',      mobile: '01099887788', nationalId: '28807230107788', device: 'Pixel 7 · Android 15 · App 6.4.1',     mobileBanking: 'active',   webBanking: 'active',   openTickets: 1 },
-  { cif: '223344', name: 'Sara Ibrahim',  segment: 'Retail',   city: 'Alexandria', mobile: '01155566677', nationalId: '29902150206677', device: 'Xiaomi 13 · Android 13 · App 6.2.0',   mobileBanking: 'locked',   webBanking: 'inactive', openTickets: 0 },
-  { cif: '667788', name: 'Omar Khaled',   segment: 'Retail',   city: 'Giza',       mobile: '01233344455', nationalId: '28611110104455', device: 'iPhone 15 · iOS 18.1 · App 6.4.1',     mobileBanking: 'active',   webBanking: 'active',   openTickets: 1 },
-  { cif: '112233', name: 'Nada Youssef',  segment: 'Retail',   city: 'Tanta',      mobile: '01544455566', nationalId: '30003031605566', device: 'Oppo A78 · Android 13 · App 6.1.4',    mobileBanking: 'inactive', webBanking: 'active',   openTickets: 1 },
-  { cif: '554433', name: 'Karim Hassan',  segment: 'Business', city: 'Cairo',      mobile: '01066677788', nationalId: '28409090107788', device: 'Web · Chrome 129 · Windows 11',        mobileBanking: 'active',   webBanking: 'inactive', openTickets: 1 },
-  { cif: '998877', name: 'Ahmed Samir',   segment: 'Retail',   city: 'Zagazig',    mobile: '01277788899', nationalId: '29706061307889', device: 'iPhone 12 · iOS 17.2 · App 6.3.0',     mobileBanking: 'active',   webBanking: 'locked',   openTickets: 0 },
-  { cif: '334455', name: 'Sara Mahmoud',  segment: 'Retail',   city: 'Cairo',      mobile: '01011122233', nationalId: '29808080102233', device: 'Samsung A54 · Android 14 · App 6.4.1', mobileBanking: 'active',   webBanking: 'active',   openTickets: 1 },
-  { cif: '776655', name: 'Hany Farouk',   segment: 'Business', city: 'Giza',       mobile: '01288899900', nationalId: '28102020109900', device: 'iPhone 13 · iOS 18.2 · App 6.4.1',     mobileBanking: 'active',   webBanking: 'active',   openTickets: 1 },
-  { cif: '221100', name: 'Tarek Ibrahim', segment: 'Premier',  city: 'Cairo',      mobile: '01133344411', nationalId: '28505050104411', device: 'iPhone 15 Pro · iOS 18.2 · App 6.4.1', mobileBanking: 'active',   webBanking: 'active',   openTickets: 1 },
-];
 
 /** Builds a ticket with the parts every mock ticket shares. */
 function ticket(t: Omit<Ticket, 'assignee' | 'notes' | 'timeline'> & Partial<Pick<Ticket, 'notes' | 'timeline'>>): Ticket {

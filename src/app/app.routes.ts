@@ -34,8 +34,11 @@ export const routes: Routes = [
       { path: 'rules', loadComponent: placeholder, data: { roles: GUIDE_ONLY, title: 'Error rules & jobs' } },
       { path: 'audit', loadComponent: placeholder, data: { roles: GUIDES, title: 'Audit log' } },
       { path: 'alerts', loadComponent: placeholder, data: { roles: AGENT, title: 'Notifications' } },
+      // A page of another role: roleGuard shows this instead (no roles, so every signed-in user may see it).
+      { path: 'forbidden', loadComponent: () => import('./features/forbidden/forbidden').then(m => m.Forbidden) },
       
     ],
   },
-  { path: '**', redirectTo: 'signin' },
+  // Any address that matches nothing above → the Not found page (not a silent redirect).
+  { path: '**', loadComponent: () => import('./features/not-found/not-found').then(m => m.NotFound) },
 ];
